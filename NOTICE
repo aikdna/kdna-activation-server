@@ -1,0 +1,14 @@
+kdna-activation-server
+Copyright 2026 KDNA Authors
+
+This product includes software developed at
+https://github.com/aikdna/kdna-activation-server
+
+This server is a license-management reference implementation. It
+implements specs/kdna-entitlement-api.md and the self-hosting
+invariant from docs/REMOTE_MODE.md. The server has no KDNA Inc.
+URL hardcoded; license records and the signing keypair are
+deployer-controlled.
+
+See LICENSE for the full Apache 2.0 license text. See README.md
+for the self-hosting guide and the API contract.

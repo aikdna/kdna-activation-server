@@ -1,0 +1,39 @@
+{
+  "name": "@aikdna/kdna-activation-server",
+  "version": "0.1.0",
+  "description": "KDNA activation server — self-hostable HTTP server for license activation, sync, revocation. Implements specs/kdna-entitlement-api.md and the self-hosting invariant from docs/REMOTE_MODE.md (Story 24).",
+  "type": "commonjs",
+  "main": "src/index.js",
+  "bin": {
+    "kdna-activation-server": "bin/kdna-activation-server.js"
+  },
+  "files": [
+    "src/",
+    "bin/",
+    "LICENSE",
+    "NOTICE",
+    "README.md"
+  ],
+  "scripts": {
+    "start": "node bin/kdna-activation-server.js",
+    "test": "node --test tests/"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {},
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/aikdna/kdna-activation-server.git"
+  },
+  "homepage": "https://github.com/aikdna/kdna-activation-server",
+  "keywords": [
+    "kdna",
+    "kdna-activation-server",
+    "license",
+    "entitlement",
+    "self-hosted",
+    "creator-license-management"
+  ]
+}
