@@ -16,7 +16,7 @@
   ],
   "scripts": {
     "start": "node bin/kdna-activation-server.js",
-    "test": "node --test tests/"
+    "test": "node --test tests/*.test.js"
   },
   "engines": {
     "node": ">=18"
