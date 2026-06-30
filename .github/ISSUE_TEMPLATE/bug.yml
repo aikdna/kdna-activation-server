@@ -1,0 +1,29 @@
+name: Bug report
+description: Report a problem with the server
+labels: ["bug"]
+body:
+  - type: input
+    id: version
+    attributes:
+      label: Server version
+      description: Output of `npm list` in the server directory
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: Steps to reproduce the behavior
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: input
+    id: node-version
+    attributes:
+      label: Node.js version
+      placeholder: "e.g. v22.0.0"
