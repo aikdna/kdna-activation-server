@@ -11,16 +11,17 @@
  *      does not match the requested domain
  *   6. /v1/entitlements/sync refreshes last_checked_at and returns
  *      a signed record
- *   7. /v1/entitlements/revoke requires the admin bearer token
- *   8. /v1/entitlements/revoke with the admin token marks the
+ *   7. /activate and /sync reject expired licenses
+ *   8. /v1/entitlements/revoke requires the admin bearer token
+ *   9. /v1/entitlements/revoke with the admin token marks the
  *      license as revoked; subsequent activate returns 403
  *      LICENSE_REVOKED
- *   9. /v1/entitlements/status returns the record (no sign required)
- *  10. Signed records verify against the server's public key
+ *  10. /v1/entitlements/status returns public metadata without license_key
+ *  11. Signed records verify against the server's public key
  *      (Ed25519 round-trip)
- *  11. Server does not call back to any KDNA Inc. URL during
+ *  12. Server does not call back to any KDNA Inc. URL during
  *      normal operation (no external network calls)
- *  12. CLI one-shot commands work: --create-license, --list,
+ *  13. CLI one-shot commands work: --create-license, --list,
  *      --revoke
  *
  * Run: node --test tests/
@@ -145,6 +146,36 @@ test('Story 24: /sync refreshes last_checked_at and returns a signed record', as
   });
 });
 
+test('Story 24: /activate and /sync reject expired licenses', async () => {
+  await withServer({}, async (ctx, dataDir, store) => {
+    const expired = store.create({
+      domain: '@x/y',
+      license_key: 'KDNA-LIC-expired',
+      issued_at: '2026-01-01T00:00:00.000Z',
+    });
+    store.put({
+      ...expired,
+      expires_at: '2026-01-02T00:00:00.000Z',
+    });
+
+    const activate = await httpJson(ctx, 'POST', '/v1/entitlements/activate', {
+      domain: '@x/y',
+      license_key: 'KDNA-LIC-expired',
+    });
+    assert.equal(activate.status, 403);
+    const activateBody = await activate.json();
+    assert.equal(activateBody.error.code, 'LICENSE_EXPIRED');
+
+    const sync = await httpJson(ctx, 'POST', '/v1/entitlements/sync', {
+      domain: '@x/y',
+      license_key: 'KDNA-LIC-expired',
+    });
+    assert.equal(sync.status, 403);
+    const syncBody = await sync.json();
+    assert.equal(syncBody.error.code, 'LICENSE_EXPIRED');
+  });
+});
+
 test('Story 24: /revoke without admin token returns 401 UNAUTHORIZED', async () => {
   await withServer({ adminToken: 'secret-admin-token' }, async (ctx, dataDir, store) => {
     store.create({ domain: '@x/y', license_key: 'KDNA-LIC-test' });
@@ -176,15 +207,17 @@ test('Story 24: /revoke with admin token marks license as revoked; activate retu
   });
 });
 
-test('Story 24: /v1/entitlements/status returns the record (no auth required)', async () => {
+test('Story 24: /v1/entitlements/status returns public metadata without license_key', async () => {
   await withServer({}, async (ctx, dataDir, store) => {
-    store.create({ domain: '@x/y', license_key: 'KDNA-LIC-test' });
-    const qs = new URLSearchParams({ domain: '@x/y', license_key: 'KDNA-LIC-test' }).toString();
+    const rec = store.create({ domain: '@x/y', license_key: 'KDNA-LIC-test' });
+    const qs = new URLSearchParams({ domain: '@x/y', license_id: rec.license_id }).toString();
     const res = await httpJson(ctx, 'GET', '/v1/entitlements/status?' + qs);
     assert.equal(res.status, 200);
     const body = await res.json();
     assert.equal(body.status, 'active');
     assert.equal(body.domain, '@x/y');
+    assert.equal(body.license_id, rec.license_id);
+    assert.equal(body.license_key, undefined);
   });
 });
 
