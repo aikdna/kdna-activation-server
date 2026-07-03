@@ -1,0 +1,43 @@
+name: Feature request
+description: Propose an improvement to the activation server
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What self-hosted activation or entitlement problem does this solve?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: Describe the smallest behavior or API change that would solve it.
+    validations:
+      required: true
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Affected surface
+      options:
+        - Entitlement activation
+        - Entitlement sync
+        - Status or admin API
+        - License record storage
+        - CLI / operations
+        - Documentation only
+    validations:
+      required: true
+  - type: textarea
+    id: contract-impact
+    attributes:
+      label: Public contract impact
+      description: Does this change request/response fields, error codes, signing behavior, or deployment assumptions?
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: How are you solving this today?
