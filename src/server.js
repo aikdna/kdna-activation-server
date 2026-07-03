@@ -133,6 +133,11 @@ function makeRequestHandler(opts) {
             'license has been revoked',
             { license_id: rec.license_id, revoked_at: rec.revoked_at, revocation_reason: rec.revocation_reason });
         }
+        if (rec.expires_at && new Date(rec.expires_at) < new Date()) {
+          return jsonError(res, 403, 'LICENSE_EXPIRED',
+            'license has expired',
+            { license_id: rec.license_id, expires_at: rec.expires_at });
+        }
         store.updateSync(rec.license_id);
         const fresh = store.get(rec.license_id);
         const signed = signEntitlement(stripForApi(fresh), keys.privatePem);
