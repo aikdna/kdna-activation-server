@@ -157,7 +157,7 @@ function makeRequestHandler(opts) {
       if (!rec || (domain && rec.domain !== domain)) {
         return jsonError(res, 404, 'NOT_FOUND', 'no entitlement matches');
       }
-      return json(res, 200, stripForApi(rec));
+      return json(res, 200, stripForStatus(rec));
     }
 
     // Revoke (admin-only, bearer token)
@@ -202,6 +202,12 @@ function makeRequestHandler(opts) {
 function stripForApi(rec) {
   const out = { ...rec };
   delete out.revoked_by;
+  return out;
+}
+
+function stripForStatus(rec) {
+  const out = stripForApi(rec);
+  delete out.license_key;
   return out;
 }
 

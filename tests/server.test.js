@@ -16,7 +16,7 @@
  *   9. /v1/entitlements/revoke with the admin token marks the
  *      license as revoked; subsequent activate returns 403
  *      LICENSE_REVOKED
- *  10. /v1/entitlements/status returns the record (no sign required)
+ *  10. /v1/entitlements/status returns public metadata without license_key
  *  11. Signed records verify against the server's public key
  *      (Ed25519 round-trip)
  *  12. Server does not call back to any KDNA Inc. URL during
@@ -207,15 +207,17 @@ test('Story 24: /revoke with admin token marks license as revoked; activate retu
   });
 });
 
-test('Story 24: /v1/entitlements/status returns the record (no auth required)', async () => {
+test('Story 24: /v1/entitlements/status returns public metadata without license_key', async () => {
   await withServer({}, async (ctx, dataDir, store) => {
-    store.create({ domain: '@x/y', license_key: 'KDNA-LIC-test' });
-    const qs = new URLSearchParams({ domain: '@x/y', license_key: 'KDNA-LIC-test' }).toString();
+    const rec = store.create({ domain: '@x/y', license_key: 'KDNA-LIC-test' });
+    const qs = new URLSearchParams({ domain: '@x/y', license_id: rec.license_id }).toString();
     const res = await httpJson(ctx, 'GET', '/v1/entitlements/status?' + qs);
     assert.equal(res.status, 200);
     const body = await res.json();
     assert.equal(body.status, 'active');
     assert.equal(body.domain, '@x/y');
+    assert.equal(body.license_id, rec.license_id);
+    assert.equal(body.license_key, undefined);
   });
 });
 
