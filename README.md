@@ -121,12 +121,14 @@ Request body:
 }
 ```
 
-### `GET /v1/entitlements/status?domain=...&license_key=...`
+### `GET /v1/entitlements/status?domain=...&license_id=...`
 
 Introspection. Returns public entitlement metadata (unsigned,
 for introspection only) and does not include `license_key`.
-Consumers should use `/activate` or `/sync` for the signed
-record.
+Use `license_id` for status checks so the secret `license_key`
+does not appear in URLs or access logs. The server still accepts
+`license_key` for compatibility, but consumers should use
+`/activate` or `/sync` for signed entitlement records.
 
 ---
 
