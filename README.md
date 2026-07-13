@@ -6,6 +6,10 @@ KDNA makes judgment portable across models and runtimes. This repository is an
 experimental entitlement reference implementation, not a marketplace, billing
 service, or AIKDNA-hosted activation platform.
 
+This package implements the legacy license-key and signed-receipt profile. It
+is not an RFC-0019 account/device external-key-grant issuer. Implementations
+must not present one profile as the other.
+
 This server answers one question:
 
 > Is this user / device / organisation currently entitled to use this
