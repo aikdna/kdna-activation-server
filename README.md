@@ -1,6 +1,10 @@
 # @aikdna/kdna-activation-server
 
-**Self-hostable HTTP activation server for KDNA `licensed`-mode assets.**
+**Experimental self-hostable HTTP activation server for KDNA `licensed` assets.**
+
+KDNA makes judgment portable across models and runtimes. This repository is an
+experimental entitlement reference implementation, not a marketplace, billing
+service, or AIKDNA-hosted activation platform.
 
 This server answers one question:
 
@@ -9,8 +13,7 @@ This server answers one question:
 
 It implements the four endpoints in
 [`specs/kdna-entitlement-api.md`][1] and the self-hosting invariant
-from [`docs/REMOTE_MODE.md`][2]. Reference implementation of
-roadmap-2026.md Story 24.
+from [`docs/REMOTE_MODE.md`][2].
 
 [1]: https://github.com/aikdna/kdna/blob/main/specs/kdna-entitlement-api.md
 [2]: https://github.com/aikdna/kdna/blob/main/docs/REMOTE_MODE.md
@@ -21,8 +24,7 @@ roadmap-2026.md Story 24.
 
 > The KDNA protocol MUST NOT assume a single official KDNA
 > server. Any asset creator can run their own activation server.
-> Official KDNA hosting is one deployment option, not the
-> protocol requirement.
+> No AIKDNA-hosted activation service is part of the current public baseline.
 
 This server is the deployer's own. The protocol does not
 hardcode any KDNA Inc. URL. The admin token is deployer-
