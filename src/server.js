@@ -51,6 +51,8 @@ const {
 
 const DEFAULT_PORT = 3001;
 const MACHINE_FINGERPRINT_RE = /^[0-9a-f]{64}$/;
+const STATUS_DOMAIN_RE = /^@[a-z0-9][a-z0-9._-]{0,63}\/[a-z0-9][a-z0-9._-]{0,127}$/;
+const LICENSE_ID_RE = /^[A-Za-z0-9_\-:.]{1,128}$/;
 const MACHINE_BINDING_KEY_SALT = Buffer.from(
   'kdna.activation.machine-binding.hkdf-salt',
   'utf8',
@@ -277,20 +279,37 @@ function makeRequestHandler(opts) {
 
     // Status (introspection; lightweight)
     if (req.method === 'GET' && url.pathname === '/entitlements/status') {
+      const statusNotFound = () => jsonError(res, 404, 'NOT_FOUND', 'no entitlement matches');
+      const domains = url.searchParams.getAll('domain');
+      const licenseIds = url.searchParams.getAll('license_id');
+      const machineFingerprints = url.searchParams.getAll('machine_fingerprint');
+
+      // Status uses public identifiers only. A secret license key must never be
+      // accepted in a URL, where ordinary proxy and access logs may retain it.
+      if (
+        url.searchParams.has('license_key') ||
+        domains.length !== 1 ||
+        licenseIds.length !== 1 ||
+        machineFingerprints.length > 1 ||
+        !STATUS_DOMAIN_RE.test(domains[0]) ||
+        !LICENSE_ID_RE.test(licenseIds[0])
+      ) {
+        return statusNotFound();
+      }
+
       const domain = url.searchParams.get('domain');
-      const licenseKey = url.searchParams.get('license_key');
       const licenseId = url.searchParams.get('license_id');
       const machineFingerprint = url.searchParams.get('machine_fingerprint');
-      const rec = resolveRecord({ domain, licenseKey, licenseId });
+      const rec = resolveRecord({ domain, licenseId });
       if (!rec) {
-        return jsonError(res, 404, 'NOT_FOUND', 'no entitlement matches');
+        return statusNotFound();
       }
       const authorization = authorizeMachine(rec, machineFingerprint);
       // license_id is public audit metadata, so status must not turn machine
       // failures into a record-enumeration oracle. Missing, malformed, wrong,
       // and not-yet-bound machines are indistinguishable from no record.
       if (!authorization.ok) {
-        return jsonError(res, 404, 'NOT_FOUND', 'no entitlement matches');
+        return statusNotFound();
       }
       return json(res, 200, stripForStatus(authorization.record));
     }

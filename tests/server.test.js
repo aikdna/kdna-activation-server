@@ -407,9 +407,15 @@ test('status fails closed for a missing or wrong bound machine without exposing 
     assert.equal(activated.status, 200);
 
     for (const query of [
+      { license_id: rec.license_id, machine_fingerprint: MACHINE_A },
+      { domain: rec.domain, machine_fingerprint: MACHINE_A },
+      { domain: rec.domain, license_key: rec.license_key, machine_fingerprint: MACHINE_A },
+      { domain: rec.domain, license_id: rec.license_id, license_key: rec.license_key, machine_fingerprint: MACHINE_A },
       { domain: rec.domain, license_id: rec.license_id },
       { domain: rec.domain, license_id: rec.license_id, machine_fingerprint: MACHINE_B },
       { domain: rec.domain, license_id: rec.license_id, machine_fingerprint: 'not-canonical' },
+      { domain: '@X/y', license_id: rec.license_id, machine_fingerprint: MACHINE_A },
+      { domain: '@x/wrong', license_id: rec.license_id, machine_fingerprint: MACHINE_A },
       { domain: rec.domain, license_id: 'lic_unknown', machine_fingerprint: MACHINE_A },
       { domain: rec.domain, license_id: '../../escape', machine_fingerprint: MACHINE_A },
     ]) {
@@ -424,6 +430,16 @@ test('status fails closed for a missing or wrong bound machine without exposing 
       assert.equal(JSON.stringify(body).includes(rec.license_id), false);
       assert.equal(JSON.stringify(body).includes(rec.license_key), false);
       assert.equal(JSON.stringify(body).includes('machine_binding_digest'), false);
+    }
+
+    for (const query of [
+      `domain=${encodeURIComponent(rec.domain)}&domain=${encodeURIComponent(rec.domain)}&license_id=${encodeURIComponent(rec.license_id)}&machine_fingerprint=${MACHINE_A}`,
+      `domain=${encodeURIComponent(rec.domain)}&license_id=${encodeURIComponent(rec.license_id)}&license_id=${encodeURIComponent(rec.license_id)}&machine_fingerprint=${MACHINE_A}`,
+      `domain=${encodeURIComponent(rec.domain)}&license_id=${encodeURIComponent(rec.license_id)}&machine_fingerprint=${MACHINE_A}&machine_fingerprint=${MACHINE_A}`,
+    ]) {
+      const response = await httpJson(ctx, 'GET', `/entitlements/status?${query}`);
+      assert.equal(response.status, 404);
+      assert.deepEqual(await response.json(), notFoundBody);
     }
   });
 });

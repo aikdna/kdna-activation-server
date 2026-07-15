@@ -144,10 +144,9 @@ Request body:
 
 Introspection. Returns public entitlement metadata (unsigned,
 for introspection only) and does not include `license_key`.
-Use `license_id` for status checks so the secret `license_key`
-does not appear in URLs or access logs. The server still accepts
-`license_key` for compatibility, but consumers should use
-`/activate` or `/sync` for signed entitlement records.
+Both the canonical scoped `domain` and `license_id` are required. The status
+endpoint rejects `license_key` entirely so the secret cannot appear in URLs or
+access logs; use `/activate` or `/sync` for signed entitlement records.
 For machine-bound licenses, status requires the already-bound canonical
 fingerprint and never creates a first binding. Error responses do not include
 license metadata, the submitted fingerprint, or the stored binding digest.

@@ -8,6 +8,8 @@
 - Require sync identifiers to resolve to one domain and license, preventing a
   public license identifier from being used to retrieve a signed secret-bearing
   entitlement record.
+- Require status lookups to use canonical public domain and license identifiers,
+  and reject secret license keys in query strings.
 - Replace generation-shaped HTTP paths with responsibility routes for server
   identity and entitlement activation, synchronization, status, and
   revocation.
