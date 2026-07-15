@@ -25,6 +25,14 @@ ${extra}`;
 
 test('release context accepts the exact natural SemVer tag and literal top CHANGELOG heading', () => {
   const version = PACKAGE_JSON.version;
+  assert.equal(
+    verifyReleaseContext({
+      packageJson: PACKAGE_JSON,
+      changelog: changelogFor(`## ${version}`),
+      releaseTag: version,
+    }).changelogHeading,
+    `## ${version}`,
+  );
   assert.deepEqual(
     verifyReleaseContext({
       packageJson: PACKAGE_JSON,
@@ -47,7 +55,14 @@ test('release context accepts the exact natural SemVer tag and literal top CHANG
 });
 test('release context rejects version drift and generation-shaped tag forms', () => {
   const version = PACKAGE_JSON.version;
-  for (const releaseTag of ['9.9.9', `v${version}`, `V${version}`, `${version}-preview`]) {
+  for (const releaseTag of [
+    '9.9.9',
+    `0${version}`,
+    `v${version}`,
+    `V${version}`,
+    `${version}-preview`,
+    `${version}+build`,
+  ]) {
     assert.throws(
       () => verifyReleaseContext({
         packageJson: PACKAGE_JSON,
@@ -56,6 +71,22 @@ test('release context rejects version drift and generation-shaped tag forms', ()
       }),
       /natural SemVer|release tag must be exactly/,
       releaseTag,
+    );
+  }
+  for (const packageVersion of [
+    `0${version}`,
+    `v${version}`,
+    `${version}-preview`,
+    `${version}+build`,
+  ]) {
+    assert.throws(
+      () => verifyReleaseContext({
+        packageJson: { ...PACKAGE_JSON, version: packageVersion },
+        changelog: changelogFor(`## ${version}`),
+        releaseTag: version,
+      }),
+      /package version must be an exact natural SemVer coordinate/,
+      packageVersion,
     );
   }
 });
@@ -85,6 +116,16 @@ test('near-match, stale, and duplicate CHANGELOG headings fail closed', () => {
     `## v${version} (2026-07-16)`,
     `## ${version}-preview (2026-07-16)`,
     `## ${version} notes`,
+    `## ${version}\t(2026-07-16)`,
+    `## ${version}\v(2026-07-16)`,
+    `## ${version}: duplicate`,
+    `## ${version}  (2026-07-16)`,
+    `## ${version}\u00a0(2026-07-16)`,
+    `##\t${version}`,
+    ` ## ${version}`,
+    '## 01.2.3',
+    '## 1.2.3-preview',
+    '## 1.2.3+build',
   ];
   for (const heading of approximateHeadings) {
     assert.throws(
@@ -119,6 +160,40 @@ test('near-match, stale, and duplicate CHANGELOG headings fail closed', () => {
         `
 ## ${version}
 `,
+      ),
+      releaseTag: version,
+    }),
+    /exactly one heading/,
+  );
+
+  const approximateDuplicates = [
+    `## ${version}\t(2026-07-15)`,
+    `## ${version}\v(2026-07-15)`,
+    `## ${version}: duplicate`,
+    `## ${version}  (2026-07-15)`,
+    `## ${version}\u2003(2026-07-15)`,
+  ];
+  for (const duplicate of approximateDuplicates) {
+    assert.throws(
+      () => verifyReleaseContext({
+        packageJson: PACKAGE_JSON,
+        changelog: changelogFor(
+          `## ${version} (2026-07-16)`,
+          `\n${duplicate}\n`,
+        ),
+        releaseTag: version,
+      }),
+      /every CHANGELOG H2 release heading/,
+      duplicate,
+    );
+  }
+
+  assert.throws(
+    () => verifyReleaseContext({
+      packageJson: PACKAGE_JSON,
+      changelog: changelogFor(
+        `## ${version} (2026-07-16)`,
+        `\u2028## ${version}\u2029`,
       ),
       releaseTag: version,
     }),

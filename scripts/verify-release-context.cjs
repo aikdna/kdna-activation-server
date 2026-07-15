@@ -6,24 +6,22 @@ const path = require('node:path');
 
 const NATURAL_SEMVER_RE = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
 const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+const RELEASE_HEADING_RE =
+  /^## ((?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*))(?: \((\d{4}-\d{2}-\d{2})\))?$/;
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
 }
 
-function headingCoordinate(line) {
-  if (!line.startsWith('## ')) return null;
-  const body = line.slice(3);
-  const separator = body.indexOf(' ');
-  return separator === -1 ? body : body.slice(0, separator);
+function parseReleaseHeading(line) {
+  const match = RELEASE_HEADING_RE.exec(line);
+  if (!match || (match[2] !== undefined && !ISO_DATE_RE.test(match[2]))) return null;
+  return { line, version: match[1] };
 }
 
 function isExactReleaseHeading(line, version) {
-  const bare = `## ${version}`;
-  if (line === bare) return true;
-  const datedPrefix = `${bare} (`;
-  if (!line.startsWith(datedPrefix) || !line.endsWith(')')) return false;
-  return ISO_DATE_RE.test(line.slice(datedPrefix.length, -1));
+  const heading = parseReleaseHeading(line);
+  return heading !== null && heading.version === version;
 }
 
 function verifyReleaseContext({ packageJson, changelog, releaseTag }) {
@@ -39,14 +37,19 @@ function verifyReleaseContext({ packageJson, changelog, releaseTag }) {
   assert(releaseTag === version, `release tag must be exactly ${version}`);
 
   const headings = String(changelog)
-    .split(/\r?\n/)
-    .filter((line) => line.startsWith('## '));
+    .split(/\r\n|[\n\r\u2028\u2029]/)
+    .filter((line) => /^\s*##(?!#)/u.test(line));
   assert(headings.length > 0, 'CHANGELOG has no release headings');
+  const parsedHeadings = headings.map(parseReleaseHeading);
+  assert(
+    parsedHeadings.every((heading) => heading !== null),
+    'every CHANGELOG H2 release heading must be exactly ## x.y.z or ## x.y.z (YYYY-MM-DD)',
+  );
   assert(
     isExactReleaseHeading(headings[0], version),
     `first CHANGELOG release heading must be exactly ## ${version} or ## ${version} (YYYY-MM-DD)`,
   );
-  const matchingHeadings = headings.filter((line) => headingCoordinate(line) === version);
+  const matchingHeadings = parsedHeadings.filter((heading) => heading.version === version);
   assert(matchingHeadings.length === 1, `CHANGELOG must contain exactly one heading for ${version}`);
 
   return { version, releaseTag, changelogHeading: headings[0] };
