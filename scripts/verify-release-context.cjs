@@ -8,6 +8,8 @@ const NATURAL_SEMVER_RE = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
 const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const RELEASE_HEADING_RE =
   /^## ((?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*))(?: \((\d{4}-\d{2}-\d{2})\))?$/;
+const FORBIDDEN_CHANGELOG_CONTROL_RE =
+  /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f-\u0084\u0086-\u009f]/u;
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
@@ -36,9 +38,20 @@ function verifyReleaseContext({ packageJson, changelog, releaseTag }) {
   );
   assert(releaseTag === version, `release tag must be exactly ${version}`);
 
-  const headings = String(changelog)
-    .split(/\r\n|[\n\r\u2028\u2029]/)
-    .filter((line) => /^\s*##(?!#)/u.test(line));
+  const changelogText = String(changelog);
+  assert(
+    !FORBIDDEN_CHANGELOG_CONTROL_RE.test(changelogText),
+    'CHANGELOG contains an unsupported control separator',
+  );
+  const lines = changelogText.split(/\r\n|[\n\r\u0085\u2028\u2029]/);
+  const hasSetextH2 = lines.some(
+    (line, index) => index > 0 && /^-+$/.test(line.trim()) && lines[index - 1].trim() !== '',
+  );
+  assert(
+    !hasSetextH2,
+    'CHANGELOG release headings must not use Setext H2; use the exact ## x.y.z syntax',
+  );
+  const headings = lines.filter((line) => /^\s*##(?!#)/u.test(line));
   assert(headings.length > 0, 'CHANGELOG has no release headings');
   const parsedHeadings = headings.map(parseReleaseHeading);
   assert(

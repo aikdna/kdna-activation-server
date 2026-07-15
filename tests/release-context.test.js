@@ -183,7 +183,7 @@ test('near-match, stale, and duplicate CHANGELOG headings fail closed', () => {
         ),
         releaseTag: version,
       }),
-      /every CHANGELOG H2 release heading/,
+      /CHANGELOG/,
       duplicate,
     );
   }
@@ -199,6 +199,28 @@ test('near-match, stale, and duplicate CHANGELOG headings fail closed', () => {
     }),
     /exactly one heading/,
   );
+
+  assert.throws(
+    () => verifyReleaseContext({
+      packageJson: PACKAGE_JSON,
+      changelog: changelogFor(
+        `## ${version} (2026-07-16)`,
+        `\u0085## ${version}\u0085`,
+      ),
+      releaseTag: version,
+    }),
+    /exactly one heading/,
+  );
+
+  for (const changelog of [
+    changelogFor(`## ${version}`, `\n${version}\n---\n`),
+    `# Changelog\n\n9.9.9\n---\n\n## ${version}\n`,
+  ]) {
+    assert.throws(
+      () => verifyReleaseContext({ packageJson: PACKAGE_JSON, changelog, releaseTag: version }),
+      /Setext H2/,
+    );
+  }
 });
 
 test('publish workflow is release-only and passes the tag only through env', () => {
