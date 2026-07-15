@@ -20,6 +20,10 @@ jobs:
           node-version: 22
           registry-url: https://registry.npmjs.org
       - run: npm ci
+      - name: Verify exact release tag, package, and CHANGELOG binding
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: node scripts/verify-release-context.cjs
       - run: npm test
       - name: Publish @aikdna/kdna-activation-server
         run: |
