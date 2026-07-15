@@ -40,6 +40,8 @@ const crypto = require('node:crypto');
 const { startServer, stopServer, makeStore, ensureKeyPair, verifyEntitlementSignature, publicKeyFingerprint } = require('../src/index');
 
 const CLI = path.resolve(__dirname, '..', 'bin', 'kdna-activation-server.js');
+const MACHINE_A = 'a'.repeat(64);
+const MACHINE_B = 'b'.repeat(64);
 
 function makeDataDir() {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'kdna-s24-'));
@@ -97,11 +99,13 @@ test('Story 24: /entitlements/activate returns a signed record for valid key', a
     const res = await httpJson(ctx, 'POST', '/entitlements/activate', {
       domain: '@x/y',
       license_key: 'KDNA-LIC-test',
+      machine_fingerprint: MACHINE_A,
     });
     assert.equal(res.status, 200);
     const body = await res.json();
     assert.equal(body.status, 'active');
     assert.equal(body.domain, '@x/y');
+    assert.equal(body.machine_fingerprint, MACHINE_A);
     assert.match(body.signature_base64, /^[A-Za-z0-9+/=]+$/);
   });
 });
@@ -120,23 +124,32 @@ test('Story 24: /activate rejects an unknown license_key with INVALID_LICENSE_KE
 
 test('Story 24: /activate rejects a license_key that does not match the domain', async () => {
   await withServer({}, async (ctx, dataDir, store) => {
-    store.create({ domain: '@x/y', license_key: 'KDNA-LIC-test' });
+    const rec = store.create({ domain: '@x/y', license_key: 'KDNA-LIC-test' });
     const res = await httpJson(ctx, 'POST', '/entitlements/activate', {
       domain: '@x/different-domain',
       license_key: 'KDNA-LIC-test',
+      machine_fingerprint: MACHINE_A,
     });
     assert.equal(res.status, 404);
     const body = await res.json();
     assert.equal(body.error.code, 'INVALID_LICENSE_KEY');
+    assert.equal(store.get(rec.license_id).machine_binding_digest, undefined);
   });
 });
 
 test('Story 24: /sync refreshes last_checked_at and returns a signed record', async () => {
   await withServer({}, async (ctx, dataDir, store) => {
     store.create({ domain: '@x/y', license_key: 'KDNA-LIC-test' });
+    const activate = await httpJson(ctx, 'POST', '/entitlements/activate', {
+      domain: '@x/y',
+      license_key: 'KDNA-LIC-test',
+      machine_fingerprint: MACHINE_A,
+    });
+    assert.equal(activate.status, 200);
     const res = await httpJson(ctx, 'POST', '/entitlements/sync', {
       domain: '@x/y',
       license_key: 'KDNA-LIC-test',
+      machine_fingerprint: MACHINE_A,
     });
     assert.equal(res.status, 200);
     const body = await res.json();
@@ -210,7 +223,17 @@ test('Story 24: /revoke with admin token marks license as revoked; activate retu
 test('Story 24: /entitlements/status returns public metadata without license_key', async () => {
   await withServer({}, async (ctx, dataDir, store) => {
     const rec = store.create({ domain: '@x/y', license_key: 'KDNA-LIC-test' });
-    const qs = new URLSearchParams({ domain: '@x/y', license_id: rec.license_id }).toString();
+    const activate = await httpJson(ctx, 'POST', '/entitlements/activate', {
+      domain: '@x/y',
+      license_key: 'KDNA-LIC-test',
+      machine_fingerprint: MACHINE_A,
+    });
+    assert.equal(activate.status, 200);
+    const qs = new URLSearchParams({
+      domain: '@x/y',
+      license_id: rec.license_id,
+      machine_fingerprint: MACHINE_A,
+    }).toString();
     const res = await httpJson(ctx, 'GET', '/entitlements/status?' + qs);
     assert.equal(res.status, 200);
     const body = await res.json();
@@ -218,14 +241,329 @@ test('Story 24: /entitlements/status returns public metadata without license_key
     assert.equal(body.domain, '@x/y');
     assert.equal(body.license_id, rec.license_id);
     assert.equal(body.license_key, undefined);
+    assert.equal(body.machine_binding_digest, undefined);
+    assert.equal(body.machine_fingerprint, undefined);
   });
+});
+
+test('machine-bound activation requires one canonical SHA-256 fingerprint', async () => {
+  await withServer({}, async (ctx, dataDir, store) => {
+    const rec = store.create({ domain: '@x/y', license_key: 'KDNA-LIC-bound' });
+
+    const missing = await httpJson(ctx, 'POST', '/entitlements/activate', {
+      domain: '@x/y', license_key: 'KDNA-LIC-bound',
+    });
+    assert.equal(missing.status, 400);
+    assert.equal((await missing.json()).error.code, 'MISSING_MACHINE_FINGERPRINT');
+
+    for (const machine_fingerprint of [
+      MACHINE_A.toUpperCase(),
+      ` ${MACHINE_A}`,
+      `${MACHINE_A} `,
+      'ａ'.repeat(64),
+      'a'.repeat(63),
+      'a'.repeat(65),
+      `sha256:${MACHINE_A}`,
+      1234,
+      {},
+    ]) {
+      const malformed = await httpJson(ctx, 'POST', '/entitlements/activate', {
+        domain: '@x/y', license_key: 'KDNA-LIC-bound', machine_fingerprint,
+      });
+      assert.equal(malformed.status, 400, JSON.stringify(machine_fingerprint));
+      const body = await malformed.json();
+      assert.equal(body.error.code, 'INVALID_MACHINE_FINGERPRINT');
+      assert.equal(JSON.stringify(body).includes('license_id'), false);
+      assert.equal(JSON.stringify(body).includes('machine_binding_digest'), false);
+    }
+
+    const syncCannotCreateBinding = await httpJson(ctx, 'POST', '/entitlements/sync', {
+      domain: rec.domain,
+      license_key: rec.license_key,
+      machine_fingerprint: MACHINE_A,
+    });
+    assert.equal(syncCannotCreateBinding.status, 403);
+    assert.equal((await syncCannotCreateBinding.json()).error.code, 'MACHINE_MISMATCH');
+    assert.equal(store.get(rec.license_id).machine_binding_digest, undefined);
+  });
+});
+
+test('first activation stores only a keyed binding digest and is idempotent for that machine', async () => {
+  await withServer({}, async (ctx, dataDir, store, keys) => {
+    const rec = store.create({ domain: '@x/y', license_key: 'KDNA-LIC-private' });
+
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const activate = await httpJson(ctx, 'POST', '/entitlements/activate', {
+        domain: '@x/y',
+        license_key: 'KDNA-LIC-private',
+        machine_fingerprint: MACHINE_A,
+      });
+      assert.equal(activate.status, 200);
+      const body = await activate.json();
+      assert.equal(body.machine_fingerprint, MACHINE_A);
+      assert.equal(body.machine_binding_digest, undefined);
+      assert.equal(verifyEntitlementSignature(body, keys.publicPem).ok, true);
+      assert.equal(verifyEntitlementSignature({
+        ...body,
+        machine_fingerprint: MACHINE_B,
+      }, keys.publicPem).ok, false);
+    }
+
+    const stored = store.get(rec.license_id);
+    assert.equal(stored.machine_fingerprint, undefined);
+    assert.match(stored.machine_binding_digest, /^[0-9a-f]{64}$/);
+    assert.notEqual(stored.machine_binding_digest, MACHINE_A);
+    const disk = fs.readFileSync(path.join(dataDir, `${rec.license_id}.json`), 'utf8');
+    assert.equal(disk.includes(MACHINE_A), false);
+
+    const wrongMachine = await httpJson(ctx, 'POST', '/entitlements/activate', {
+      domain: '@x/y',
+      license_key: 'KDNA-LIC-private',
+      machine_fingerprint: MACHINE_B,
+    });
+    assert.equal(wrongMachine.status, 403);
+    const denied = await wrongMachine.json();
+    assert.equal(denied.error.code, 'MACHINE_MISMATCH');
+    assert.deepEqual(Object.keys(denied), ['ok', 'error']);
+    assert.equal(JSON.stringify(denied).includes(rec.license_id), false);
+    assert.equal(store.get(rec.license_id).machine_binding_digest, stored.machine_binding_digest);
+  });
+});
+
+test('simultaneous first activations bind exactly one machine and preserve the winner', async () => {
+  await withServer({}, async (ctx, dataDir, store) => {
+    const rec = store.create({ domain: '@x/race', license_key: 'KDNA-LIC-race' });
+    const request = (machine_fingerprint) => httpJson(ctx, 'POST', '/entitlements/activate', {
+      domain: '@x/race', license_key: 'KDNA-LIC-race', machine_fingerprint,
+    });
+
+    const responses = await Promise.all([request(MACHINE_A), request(MACHINE_B)]);
+    const statuses = responses.map((response) => response.status).sort();
+    assert.deepEqual(statuses, [200, 403]);
+    const bodies = await Promise.all(responses.map((response) => response.json()));
+    const winner = bodies.find((body) => body.signature_base64).machine_fingerprint;
+    const loser = winner === MACHINE_A ? MACHINE_B : MACHINE_A;
+
+    const retryWinner = await request(winner);
+    assert.equal(retryWinner.status, 200);
+    const retryLoser = await request(loser);
+    assert.equal(retryLoser.status, 403);
+    assert.equal((await retryLoser.json()).error.code, 'MACHINE_MISMATCH');
+    assert.equal(store.get(rec.license_id).machine_fingerprint, undefined);
+  });
+});
+
+test('sync requires matching domain, secret key, optional id, and bound machine', async () => {
+  await withServer({}, async (ctx, dataDir, store) => {
+    const first = store.create({
+      domain: '@x/first', license_key: 'KDNA-LIC-first', license_id: 'lic_first',
+    });
+    const second = store.create({
+      domain: '@x/second', license_key: 'KDNA-LIC-second', license_id: 'lic_second',
+      require_machine_binding: false,
+    });
+    const activate = await httpJson(ctx, 'POST', '/entitlements/activate', {
+      domain: first.domain,
+      license_key: first.license_key,
+      machine_fingerprint: MACHINE_A,
+    });
+    assert.equal(activate.status, 200);
+
+    for (const [request, expectedStatus, expectedCode] of [
+      [{ license_key: first.license_key, machine_fingerprint: MACHINE_A }, 400, 'MISSING_DOMAIN'],
+      [{ domain: first.domain, license_id: first.license_id, machine_fingerprint: MACHINE_A }, 400, 'MISSING_LICENSE_KEY'],
+      [{ domain: second.domain, license_key: first.license_key, machine_fingerprint: MACHINE_A }, 404, 'INVALID_LICENSE_KEY'],
+      [{ domain: first.domain, license_key: first.license_key, license_id: second.license_id, machine_fingerprint: MACHINE_A }, 404, 'INVALID_LICENSE_KEY'],
+      [{ domain: first.domain, license_key: first.license_key }, 400, 'MISSING_MACHINE_FINGERPRINT'],
+      [{ domain: first.domain, license_key: first.license_key, machine_fingerprint: MACHINE_B }, 403, 'MACHINE_MISMATCH'],
+    ]) {
+      const response = await httpJson(ctx, 'POST', '/entitlements/sync', request);
+      assert.equal(response.status, expectedStatus, JSON.stringify(request));
+      const body = await response.json();
+      assert.equal(body.error.code, expectedCode);
+      assert.equal(JSON.stringify(body).includes(first.license_id), false);
+      assert.equal(JSON.stringify(body).includes(first.license_key), false);
+    }
+  });
+});
+
+test('status fails closed for a missing or wrong bound machine without exposing the record', async () => {
+  await withServer({}, async (ctx, dataDir, store) => {
+    const rec = store.create({ domain: '@x/y', license_key: 'KDNA-LIC-status' });
+
+    const beforeActivation = new URLSearchParams({
+      domain: rec.domain, license_id: rec.license_id, machine_fingerprint: MACHINE_A,
+    });
+    const before = await httpJson(ctx, 'GET', `/entitlements/status?${beforeActivation}`);
+    assert.equal(before.status, 404);
+    const notFoundBody = await before.json();
+    assert.equal(notFoundBody.error.code, 'NOT_FOUND');
+
+    const activated = await httpJson(ctx, 'POST', '/entitlements/activate', {
+      domain: rec.domain,
+      license_key: rec.license_key,
+      machine_fingerprint: MACHINE_A,
+    });
+    assert.equal(activated.status, 200);
+
+    for (const query of [
+      { domain: rec.domain, license_id: rec.license_id },
+      { domain: rec.domain, license_id: rec.license_id, machine_fingerprint: MACHINE_B },
+      { domain: rec.domain, license_id: rec.license_id, machine_fingerprint: 'not-canonical' },
+      { domain: rec.domain, license_id: 'lic_unknown', machine_fingerprint: MACHINE_A },
+      { domain: rec.domain, license_id: '../../escape', machine_fingerprint: MACHINE_A },
+    ]) {
+      const response = await httpJson(
+        ctx,
+        'GET',
+        `/entitlements/status?${new URLSearchParams(query)}`,
+      );
+      assert.equal(response.status, 404);
+      const body = await response.json();
+      assert.deepEqual(body, notFoundBody);
+      assert.equal(JSON.stringify(body).includes(rec.license_id), false);
+      assert.equal(JSON.stringify(body).includes(rec.license_key), false);
+      assert.equal(JSON.stringify(body).includes('machine_binding_digest'), false);
+    }
+  });
+});
+
+test('unbound licenses keep no-binding activation, sync, and status semantics', async () => {
+  await withServer({}, async (ctx, dataDir, store) => {
+    const rec = store.create({
+      domain: '@x/unbound',
+      license_key: 'KDNA-LIC-unbound',
+      require_machine_binding: false,
+    });
+    const activate = await httpJson(ctx, 'POST', '/entitlements/activate', {
+      domain: rec.domain,
+      license_key: rec.license_key,
+      machine_fingerprint: 'not-a-fingerprint',
+    });
+    assert.equal(activate.status, 200);
+    assert.equal((await activate.json()).machine_fingerprint, undefined);
+
+    const sync = await httpJson(ctx, 'POST', '/entitlements/sync', {
+      domain: rec.domain, license_key: rec.license_key,
+    });
+    assert.equal(sync.status, 200);
+    assert.equal((await sync.json()).machine_fingerprint, undefined);
+
+    const status = await httpJson(
+      ctx,
+      'GET',
+      `/entitlements/status?${new URLSearchParams({ domain: rec.domain, license_id: rec.license_id })}`,
+    );
+    assert.equal(status.status, 200);
+    assert.equal(store.get(rec.license_id).machine_binding_digest, undefined);
+  });
+});
+
+test('a legacy raw binding migrates only after an exact machine match', async () => {
+  await withServer({}, async (ctx, dataDir, store) => {
+    const rec = store.create({ domain: '@x/legacy', license_key: 'KDNA-LIC-legacy' });
+    store.put({ ...rec, machine_fingerprint: MACHINE_A });
+
+    const mismatch = await httpJson(ctx, 'POST', '/entitlements/activate', {
+      domain: rec.domain, license_key: rec.license_key, machine_fingerprint: MACHINE_B,
+    });
+    assert.equal(mismatch.status, 403);
+    assert.equal(store.get(rec.license_id).machine_fingerprint, MACHINE_A);
+
+    const matching = await httpJson(ctx, 'POST', '/entitlements/activate', {
+      domain: rec.domain, license_key: rec.license_key, machine_fingerprint: MACHINE_A,
+    });
+    assert.equal(matching.status, 200);
+    const stored = store.get(rec.license_id);
+    assert.equal(stored.machine_fingerprint, undefined);
+    assert.match(stored.machine_binding_digest, /^[0-9a-f]{64}$/);
+  });
+});
+
+test('a malformed legacy raw binding cannot be claimed by a new machine', async () => {
+  await withServer({}, async (ctx, dataDir, store) => {
+    const rec = store.create({ domain: '@x/legacy', license_key: 'KDNA-LIC-bad-legacy' });
+    store.put({ ...rec, machine_fingerprint: 'legacy-device-name' });
+    const response = await httpJson(ctx, 'POST', '/entitlements/activate', {
+      domain: rec.domain, license_key: rec.license_key, machine_fingerprint: MACHINE_A,
+    });
+    assert.equal(response.status, 403);
+    assert.equal((await response.json()).error.code, 'MACHINE_MISMATCH');
+    assert.equal(store.get(rec.license_id).machine_binding_digest, undefined);
+  });
+});
+
+test('a legacy record with no binding flag inherits the fail-closed default', async () => {
+  await withServer({}, async (ctx, dataDir, store) => {
+    const rec = store.create({ domain: '@x/default', license_key: 'KDNA-LIC-default' });
+    const legacy = { ...rec };
+    delete legacy.require_machine_binding;
+    store.put(legacy);
+
+    const missing = await httpJson(ctx, 'POST', '/entitlements/activate', {
+      domain: rec.domain, license_key: rec.license_key,
+    });
+    assert.equal(missing.status, 400);
+    assert.equal((await missing.json()).error.code, 'MISSING_MACHINE_FINGERPRINT');
+
+    const activate = await httpJson(ctx, 'POST', '/entitlements/activate', {
+      domain: rec.domain, license_key: rec.license_key, machine_fingerprint: MACHINE_A,
+    });
+    assert.equal(activate.status, 200);
+    const response = await activate.json();
+    assert.equal(response.require_machine_binding, true);
+    assert.equal(response.machine_fingerprint, MACHINE_A);
+    assert.equal(store.get(rec.license_id).require_machine_binding, true);
+  });
+});
+
+test('the keyed machine binding survives a clean server restart', async () => {
+  const dataDir = makeDataDir();
+  let first;
+  let second;
+  try {
+    first = await startServer({ dataDir, port: 0 });
+    const rec = first.store.create({
+      domain: '@x/restart',
+      license_key: 'KDNA-LIC-restart',
+    });
+    const activate = await httpJson(first, 'POST', '/entitlements/activate', {
+      domain: rec.domain,
+      license_key: rec.license_key,
+      machine_fingerprint: MACHINE_A,
+    });
+    assert.equal(activate.status, 200);
+    const beforeRestart = first.store.get(rec.license_id).machine_binding_digest;
+    await stopServer(first.server);
+    first = null;
+
+    second = await startServer({ dataDir, port: 0 });
+    const sync = await httpJson(second, 'POST', '/entitlements/sync', {
+      domain: rec.domain,
+      license_key: rec.license_key,
+      machine_fingerprint: MACHINE_A,
+    });
+    assert.equal(sync.status, 200);
+    assert.equal(second.store.get(rec.license_id).machine_binding_digest, beforeRestart);
+
+    const wrongMachine = await httpJson(second, 'POST', '/entitlements/sync', {
+      domain: rec.domain,
+      license_key: rec.license_key,
+      machine_fingerprint: MACHINE_B,
+    });
+    assert.equal(wrongMachine.status, 403);
+  } finally {
+    if (first) await stopServer(first.server);
+    if (second) await stopServer(second.server);
+    fs.rmSync(dataDir, { recursive: true, force: true });
+  }
 });
 
 test('Story 24: signed records verify against the server public key (Ed25519 round-trip)', async () => {
   await withServer({}, async (ctx, dataDir, store, keys) => {
     store.create({ domain: '@x/y', license_key: 'KDNA-LIC-test' });
     const res = await httpJson(ctx, 'POST', '/entitlements/activate', {
-      domain: '@x/y', license_key: 'KDNA-LIC-test',
+      domain: '@x/y', license_key: 'KDNA-LIC-test', machine_fingerprint: MACHINE_A,
     });
     const body = await res.json();
     const verify = verifyEntitlementSignature(body, keys.publicPem);

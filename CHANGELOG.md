@@ -2,6 +2,12 @@
 
 ## 0.2.0 (2026-07-16)
 
+- Enforce the default machine-binding policy during activation, sync, and
+  status checks; persist only a purpose-separated keyed digest and migrate
+  valid legacy raw fingerprints after an exact match.
+- Require sync identifiers to resolve to one domain and license, preventing a
+  public license identifier from being used to retrieve a signed secret-bearing
+  entitlement record.
 - Replace generation-shaped HTTP paths with responsibility routes for server
   identity and entitlement activation, synchronization, status, and
   revocation.

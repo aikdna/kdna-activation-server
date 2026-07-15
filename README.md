@@ -59,7 +59,7 @@ kdna-activation-server --port 3001 --admin-token "your-secret"
 curl http://localhost:3001/healthz
 curl -X POST http://localhost:3001/entitlements/activate \
   -H 'Content-Type: application/json' \
-  -d '{"domain":"@yourname/your-asset","license_key":"KDNA-LIC-customer-1"}'
+  -d '{"domain":"@yourname/your-asset","license_key":"KDNA-LIC-customer-1","machine_fingerprint":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}'
 ```
 
 That's it. No registration, no phone-home, no KDNA Inc. URL.
@@ -96,6 +96,12 @@ Request body:
 Optional: `client`, `client_version`, `agent`, `account_id`,
 `device_label`.
 
+`machine_fingerprint` is required when the license was created with
+`require_machine_binding: true` (the default). Its canonical wire format is
+exactly 64 lowercase hexadecimal characters: the SHA-256 digest produced by
+the client. Uppercase, prefixed, whitespace-padded, non-ASCII, short, and long
+forms are rejected rather than normalized into aliases.
+
 Response (200): the signed entitlement record (see
 `specs/kdna-entitlement-api.md` §5).
 
@@ -103,12 +109,19 @@ Errors:
 - `INVALID_LICENSE_KEY` (404) — key does not match the domain
 - `LICENSE_REVOKED` (403) — license has been revoked
 - `LICENSE_EXPIRED` (403) — `expires_at` is in the past
+- `MISSING_MACHINE_FINGERPRINT` (400) — a bound license omitted its fingerprint
+- `INVALID_MACHINE_FINGERPRINT` (400) — the fingerprint is not canonical
+- `MACHINE_MISMATCH` (403) — the license is bound to another machine or has
+  not yet been activated on this machine
 
 ### `POST /entitlements/sync`
 
 Refreshes the entitlement state (updates `last_checked_at` and
-`offline_valid_until`). Returns the signed record. Same
-errors as `/activate`.
+`offline_valid_until`). `domain` and `license_key` are required;
+`license_id` is optional but, when present, must identify that same license.
+Machine-bound licenses must already have been activated and must send the same
+canonical `machine_fingerprint`. Returns the signed record. Same errors as
+`/activate`.
 
 ### `POST /entitlements/revoke` (admin)
 
@@ -127,7 +140,7 @@ Request body:
 }
 ```
 
-### `GET /entitlements/status?domain=...&license_id=...`
+### `GET /entitlements/status?domain=...&license_id=...&machine_fingerprint=...`
 
 Introspection. Returns public entitlement metadata (unsigned,
 for introspection only) and does not include `license_key`.
@@ -135,6 +148,12 @@ Use `license_id` for status checks so the secret `license_key`
 does not appear in URLs or access logs. The server still accepts
 `license_key` for compatibility, but consumers should use
 `/activate` or `/sync` for signed entitlement records.
+For machine-bound licenses, status requires the already-bound canonical
+fingerprint and never creates a first binding. Error responses do not include
+license metadata, the submitted fingerprint, or the stored binding digest.
+Missing, malformed, mismatched, and not-yet-bound machine authorization all
+return the same `NOT_FOUND` response as an unknown record, so public
+`license_id` values cannot be used as a binding-enumeration oracle.
 
 ---
 
@@ -174,6 +193,10 @@ mode 0600.
 - **Records are signed.** Every `/activate` and `/sync`
   response is signed with the server's Ed25519 key. Clients
   can verify against `/server/identity`.
+- **Raw machine fingerprints are not stored by new activations.** The server
+  derives a purpose-separated HMAC key from its local private key and stores
+  only the keyed binding digest. A matching request migrates an older raw
+  fingerprint record in place; malformed legacy bindings fail closed.
 
 ---
 

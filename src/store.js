@@ -18,6 +18,9 @@
  * CLI's local copy at ~/.kdna/licenses/<domain>.json is a
  * CLIENT cache, not the source of truth. If a client claims
  * "active" but the server says "revoked", the server wins.
+ * Machine-bound server records persist a purpose-separated keyed digest in
+ * `machine_binding_digest`; raw `machine_fingerprint` values are accepted only
+ * as legacy migration input and are removed after an exact successful match.
  */
 
 'use strict';
@@ -25,6 +28,8 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
+
+const MACHINE_BINDING_DIGEST_RE = /^[0-9a-f]{64}$/;
 
 const DEFAULT_DATA_DIR = path.join(
   process.env.HOME || process.env.USERPROFILE || '.',
@@ -78,6 +83,70 @@ function makeStore(dataDir) {
     record.updated_at = new Date().toISOString();
     fs.writeFileSync(p, JSON.stringify(record, null, 2) + '\n', { mode: 0o600 });
     return record;
+  }
+
+  function compareAndBindMachine(licenseId, {
+    bindingDigest,
+    allowInitialBinding = false,
+    deriveLegacyDigest,
+  } = {}) {
+    if (!MACHINE_BINDING_DIGEST_RE.test(bindingDigest || '')) {
+      throw new Error('bindingDigest must be exactly 64 lowercase hexadecimal characters');
+    }
+
+    // All reads, comparisons, and writes are synchronous and kept inside this
+    // store operation. That gives one running server a compare-and-bind
+    // critical section: two first activations cannot both succeed.
+    const rec = get(licenseId);
+    if (!rec) return { ok: false, reason: 'missing', record: null };
+    if (rec.require_machine_binding === false) {
+      return { ok: true, reason: 'disabled', record: rec };
+    }
+
+    const hasStoredDigest = Object.prototype.hasOwnProperty.call(
+      rec,
+      'machine_binding_digest',
+    );
+    const hasLegacyFingerprint = Object.prototype.hasOwnProperty.call(
+      rec,
+      'machine_fingerprint',
+    );
+    let storedDigest = hasStoredDigest ? rec.machine_binding_digest : null;
+
+    if (hasStoredDigest && !MACHINE_BINDING_DIGEST_RE.test(storedDigest || '')) {
+      return { ok: false, reason: 'invalid', record: rec };
+    }
+
+    if (!storedDigest && hasLegacyFingerprint) {
+      storedDigest = typeof deriveLegacyDigest === 'function'
+        ? deriveLegacyDigest(rec.machine_fingerprint)
+        : null;
+      if (!MACHINE_BINDING_DIGEST_RE.test(storedDigest || '')) {
+        return { ok: false, reason: 'invalid', record: rec };
+      }
+    }
+
+    if (storedDigest && !equalBindingDigests(storedDigest, bindingDigest)) {
+      return { ok: false, reason: 'mismatch', record: rec };
+    }
+    if (!storedDigest && !allowInitialBinding) {
+      return { ok: false, reason: 'not_bound', record: rec };
+    }
+    if (storedDigest && !hasLegacyFingerprint && rec.require_machine_binding === true) {
+      return { ok: true, reason: 'matched', record: rec };
+    }
+
+    const bound = {
+      ...rec,
+      require_machine_binding: true,
+      machine_binding_digest: bindingDigest,
+    };
+    delete bound.machine_fingerprint;
+    return {
+      ok: true,
+      reason: storedDigest ? 'migrated' : 'bound',
+      record: put(bound),
+    };
   }
 
   function list() {
@@ -141,7 +210,24 @@ function makeStore(dataDir) {
     return put(rec);
   }
 
-  return { get, getByKey, put, list, create, revoke, updateSync, dataDir };
+  return {
+    get,
+    getByKey,
+    put,
+    list,
+    create,
+    revoke,
+    updateSync,
+    compareAndBindMachine,
+    dataDir,
+  };
+}
+
+function equalBindingDigests(left, right) {
+  if (!MACHINE_BINDING_DIGEST_RE.test(left || '') || !MACHINE_BINDING_DIGEST_RE.test(right || '')) {
+    return false;
+  }
+  return crypto.timingSafeEqual(Buffer.from(left, 'hex'), Buffer.from(right, 'hex'));
 }
 
 module.exports = { makeStore, DEFAULT_DATA_DIR };

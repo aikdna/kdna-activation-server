@@ -161,7 +161,7 @@ async function main() {
       `  curl http://${host}:${actualPort}/server/identity\n` +
       `  curl -X POST http://${host}:${actualPort}/entitlements/activate \\\n` +
       `    -H 'Content-Type: application/json' \\\n` +
-      `    -d '{"domain":"@yourname/your-asset","license_key":"KDNA-LIC-..."}'\n` +
+      `    -d '{"domain":"@yourname/your-asset","license_key":"KDNA-LIC-...","machine_fingerprint":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}'\n` +
       `\n` +
       `Create a license:\n` +
       `  kdna-activation-server --create-license '{"domain":"@yourname/your-asset","license_key":"KDNA-LIC-test1"}'\n`,

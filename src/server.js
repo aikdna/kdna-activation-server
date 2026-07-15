@@ -4,12 +4,12 @@
  * Implements the four endpoints from specs/kdna-entitlement-api.md:
  *
  *   POST /entitlements/activate
- *     Body: { domain, license_key, machine_fingerprint?, ... }
+ *     Body: { domain, license_key, machine_fingerprint, ... }
  *     Response: activation record (status: "active")
  *     Errors: INVALID_LICENSE_KEY, LICENSE_REVOKED, ...
  *
  *   POST /entitlements/sync
- *     Body: { domain, license_key, license_id? }
+ *     Body: { domain, license_key, license_id?, machine_fingerprint? }
  *     Response: same as activation (refreshes last_checked_at)
  *
  *   POST /entitlements/revoke
@@ -17,7 +17,7 @@
  *     Body: { license_id, domain, reason, revoked_by? }
  *     Response: { ok: true, license_id, status: "revoked", ... }
  *
- *   GET /entitlements/status?domain=...&license_key=...
+ *   GET /entitlements/status?domain=...&license_id=...&machine_fingerprint=...
  *     Response: activation record
  *
  * Plus:
@@ -50,11 +50,124 @@ const {
 } = require('./signing');
 
 const DEFAULT_PORT = 3001;
+const MACHINE_FINGERPRINT_RE = /^[0-9a-f]{64}$/;
+const MACHINE_BINDING_KEY_SALT = Buffer.from(
+  'kdna.activation.machine-binding.hkdf-salt',
+  'utf8',
+);
+const MACHINE_BINDING_KEY_INFO = Buffer.from(
+  'kdna.activation.machine-binding.hmac-key',
+  'utf8',
+);
+const MACHINE_BINDING_RECORD_CONTEXT = 'kdna.activation.machine-binding.fingerprint\0';
+
+function normalizeMachineFingerprint(value) {
+  if (typeof value !== 'string' || !MACHINE_FINGERPRINT_RE.test(value)) return null;
+  return value;
+}
+
+function deriveMachineBindingDigest(machineFingerprint, privatePem) {
+  const bindingKey = Buffer.from(crypto.hkdfSync(
+    'sha256',
+    Buffer.from(privatePem, 'utf8'),
+    MACHINE_BINDING_KEY_SALT,
+    MACHINE_BINDING_KEY_INFO,
+    32,
+  ));
+  return crypto
+    .createHmac('sha256', bindingKey)
+    .update(MACHINE_BINDING_RECORD_CONTEXT, 'utf8')
+    .update(machineFingerprint, 'utf8')
+    .digest('hex');
+}
 
 function makeRequestHandler(opts) {
   if (!opts.store) throw new Error('store is required');
   if (!opts.keys) throw new Error('keys is required');
   const { store, keys, adminToken } = opts;
+
+  function resolveRecord({ domain, licenseKey, licenseId }) {
+    let byKey;
+    let byId;
+    try {
+      byKey = licenseKey ? store.getByKey(licenseKey) : null;
+      byId = licenseId ? store.get(licenseId) : null;
+    } catch {
+      return null;
+    }
+
+    if (licenseKey && !byKey) return null;
+    if (licenseId && !byId) return null;
+    if (byKey && byId && byKey.license_id !== byId.license_id) return null;
+
+    const rec = byKey || byId;
+    if (!rec || (domain && rec.domain !== domain)) return null;
+    return rec;
+  }
+
+  function authorizeMachine(rec, suppliedFingerprint, { allowInitialBinding = false } = {}) {
+    if (rec.require_machine_binding === false) {
+      return { ok: true, record: rec, machineFingerprint: null };
+    }
+
+    if (suppliedFingerprint === undefined || suppliedFingerprint === null || suppliedFingerprint === '') {
+      return {
+        ok: false,
+        status: 400,
+        code: 'MISSING_MACHINE_FINGERPRINT',
+        message: 'machine_fingerprint is required for this license',
+      };
+    }
+
+    const machineFingerprint = normalizeMachineFingerprint(suppliedFingerprint);
+    if (!machineFingerprint) {
+      return {
+        ok: false,
+        status: 400,
+        code: 'INVALID_MACHINE_FINGERPRINT',
+        message: 'machine_fingerprint must be exactly 64 lowercase hexadecimal characters',
+      };
+    }
+
+    const suppliedDigest = deriveMachineBindingDigest(machineFingerprint, keys.privatePem);
+    const binding = store.compareAndBindMachine(rec.license_id, {
+      bindingDigest: suppliedDigest,
+      allowInitialBinding,
+      deriveLegacyDigest(value) {
+        const legacyFingerprint = normalizeMachineFingerprint(value);
+        return legacyFingerprint
+          ? deriveMachineBindingDigest(legacyFingerprint, keys.privatePem)
+          : null;
+      },
+    });
+
+    if (!binding.ok && binding.reason === 'missing') {
+      return {
+        ok: false,
+        status: 404,
+        code: 'INVALID_LICENSE_KEY',
+        message: 'no entitlement matches the provided identifiers',
+      };
+    }
+    if (!binding.ok) {
+      return {
+        ok: false,
+        status: 403,
+        code: 'MACHINE_MISMATCH',
+        message: 'machine fingerprint does not match an active binding',
+      };
+    }
+    return { ok: true, record: binding.record, machineFingerprint };
+  }
+
+  function sendMachineError(res, authorization) {
+    return jsonError(
+      res,
+      authorization.status,
+      authorization.code,
+      authorization.message,
+    );
+  }
 
   async function handle(req, res) {
     const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
@@ -89,7 +202,7 @@ function makeRequestHandler(opts) {
     // Activation
     if (req.method === 'POST' && url.pathname === '/entitlements/activate') {
       await readJson(req, res, async (body) => {
-        const { domain, license_key } = body || {};
+        const { domain, license_key, machine_fingerprint } = body || {};
         if (!domain) return jsonError(res, 400, 'MISSING_DOMAIN', 'domain is required');
         if (!license_key) return jsonError(res, 400, 'MISSING_LICENSE_KEY', 'license_key is required');
 
@@ -108,10 +221,19 @@ function makeRequestHandler(opts) {
             'license has expired',
             { license_id: rec.license_id, expires_at: rec.expires_at });
         }
+        const authorization = authorizeMachine(rec, machine_fingerprint, {
+          allowInitialBinding: true,
+        });
+        if (!authorization.ok) return sendMachineError(res, authorization);
         // Activate: refresh last_checked_at + offline_valid_until
         store.updateSync(rec.license_id);
         const fresh = store.get(rec.license_id);
-        const signed = signEntitlement(stripForApi(fresh), keys.privatePem);
+        const response = stripForApi(fresh);
+        if (fresh.require_machine_binding !== false) {
+          response.require_machine_binding = true;
+          response.machine_fingerprint = authorization.machineFingerprint;
+        }
+        const signed = signEntitlement(response, keys.privatePem);
         return json(res, 200, signed);
       });
       return;
@@ -120,11 +242,11 @@ function makeRequestHandler(opts) {
     // Sync
     if (req.method === 'POST' && url.pathname === '/entitlements/sync') {
       await readJson(req, res, async (body) => {
-        const { domain, license_key, license_id } = body || {};
-        let rec = null;
-        if (license_id) rec = store.get(license_id);
-        if (!rec && license_key) rec = store.getByKey(license_key);
-        if (!rec || (domain && rec.domain !== domain)) {
+        const { domain, license_key, license_id, machine_fingerprint } = body || {};
+        if (!domain) return jsonError(res, 400, 'MISSING_DOMAIN', 'domain is required');
+        if (!license_key) return jsonError(res, 400, 'MISSING_LICENSE_KEY', 'license_key is required');
+        const rec = resolveRecord({ domain, licenseKey: license_key, licenseId: license_id });
+        if (!rec) {
           return jsonError(res, 404, 'INVALID_LICENSE_KEY',
             'no entitlement matches the provided identifiers');
         }
@@ -138,9 +260,16 @@ function makeRequestHandler(opts) {
             'license has expired',
             { license_id: rec.license_id, expires_at: rec.expires_at });
         }
+        const authorization = authorizeMachine(rec, machine_fingerprint);
+        if (!authorization.ok) return sendMachineError(res, authorization);
         store.updateSync(rec.license_id);
         const fresh = store.get(rec.license_id);
-        const signed = signEntitlement(stripForApi(fresh), keys.privatePem);
+        const response = stripForApi(fresh);
+        if (fresh.require_machine_binding !== false) {
+          response.require_machine_binding = true;
+          response.machine_fingerprint = authorization.machineFingerprint;
+        }
+        const signed = signEntitlement(response, keys.privatePem);
         return json(res, 200, signed);
       });
       return;
@@ -151,13 +280,19 @@ function makeRequestHandler(opts) {
       const domain = url.searchParams.get('domain');
       const licenseKey = url.searchParams.get('license_key');
       const licenseId = url.searchParams.get('license_id');
-      let rec = null;
-      if (licenseId) rec = store.get(licenseId);
-      if (!rec && licenseKey) rec = store.getByKey(licenseKey);
-      if (!rec || (domain && rec.domain !== domain)) {
+      const machineFingerprint = url.searchParams.get('machine_fingerprint');
+      const rec = resolveRecord({ domain, licenseKey, licenseId });
+      if (!rec) {
         return jsonError(res, 404, 'NOT_FOUND', 'no entitlement matches');
       }
-      return json(res, 200, stripForStatus(rec));
+      const authorization = authorizeMachine(rec, machineFingerprint);
+      // license_id is public audit metadata, so status must not turn machine
+      // failures into a record-enumeration oracle. Missing, malformed, wrong,
+      // and not-yet-bound machines are indistinguishable from no record.
+      if (!authorization.ok) {
+        return jsonError(res, 404, 'NOT_FOUND', 'no entitlement matches');
+      }
+      return json(res, 200, stripForStatus(authorization.record));
     }
 
     // Revoke (admin-only, bearer token)
@@ -202,6 +337,8 @@ function makeRequestHandler(opts) {
 function stripForApi(rec) {
   const out = { ...rec };
   delete out.revoked_by;
+  delete out.machine_binding_digest;
+  delete out.machine_fingerprint;
   return out;
 }
 
