@@ -3,20 +3,20 @@
  *
  * Covers:
  *   1. /healthz returns 200
- *   2. /v1/server/identity returns the server's Ed25519 public key
- *   3. /v1/entitlements/activate returns a signed activation
+ *   2. /server/identity returns the server's Ed25519 public key
+ *   3. /entitlements/activate returns a signed activation
  *      record for a valid (domain, license_key) pair
- *   4. /v1/entitlements/activate rejects an unknown license_key
- *   5. /v1/entitlements/activate rejects a license_key that
+ *   4. /entitlements/activate rejects an unknown license_key
+ *   5. /entitlements/activate rejects a license_key that
  *      does not match the requested domain
- *   6. /v1/entitlements/sync refreshes last_checked_at and returns
+ *   6. /entitlements/sync refreshes last_checked_at and returns
  *      a signed record
  *   7. /activate and /sync reject expired licenses
- *   8. /v1/entitlements/revoke requires the admin bearer token
- *   9. /v1/entitlements/revoke with the admin token marks the
+ *   8. /entitlements/revoke requires the admin bearer token
+ *   9. /entitlements/revoke with the admin token marks the
  *      license as revoked; subsequent activate returns 403
  *      LICENSE_REVOKED
- *  10. /v1/entitlements/status returns public metadata without license_key
+ *  10. /entitlements/status returns public metadata without license_key
  *  11. Signed records verify against the server's public key
  *      (Ed25519 round-trip)
  *  12. Server does not call back to any KDNA Inc. URL during
@@ -79,9 +79,9 @@ test('Story 24: /healthz returns 200 with server metadata', async () => {
   });
 });
 
-test('Story 24: /v1/server/identity returns the server public key', async () => {
+test('Story 24: /server/identity returns the server public key', async () => {
   await withServer({}, async (ctx) => {
-    const res = await httpJson(ctx, 'GET', '/v1/server/identity');
+    const res = await httpJson(ctx, 'GET', '/server/identity');
     assert.equal(res.status, 200);
     const body = await res.json();
     assert.match(body.public_key_pem, /-----BEGIN PUBLIC KEY-----/);
@@ -91,10 +91,10 @@ test('Story 24: /v1/server/identity returns the server public key', async () => 
   });
 });
 
-test('Story 24: /v1/entitlements/activate returns a signed record for valid key', async () => {
+test('Story 24: /entitlements/activate returns a signed record for valid key', async () => {
   await withServer({}, async (ctx, dataDir, store) => {
     store.create({ domain: '@x/y', license_key: 'KDNA-LIC-test' });
-    const res = await httpJson(ctx, 'POST', '/v1/entitlements/activate', {
+    const res = await httpJson(ctx, 'POST', '/entitlements/activate', {
       domain: '@x/y',
       license_key: 'KDNA-LIC-test',
     });
@@ -108,7 +108,7 @@ test('Story 24: /v1/entitlements/activate returns a signed record for valid key'
 
 test('Story 24: /activate rejects an unknown license_key with INVALID_LICENSE_KEY', async () => {
   await withServer({}, async (ctx) => {
-    const res = await httpJson(ctx, 'POST', '/v1/entitlements/activate', {
+    const res = await httpJson(ctx, 'POST', '/entitlements/activate', {
       domain: '@x/y',
       license_key: 'KDNA-LIC-DOES-NOT-EXIST',
     });
@@ -121,7 +121,7 @@ test('Story 24: /activate rejects an unknown license_key with INVALID_LICENSE_KE
 test('Story 24: /activate rejects a license_key that does not match the domain', async () => {
   await withServer({}, async (ctx, dataDir, store) => {
     store.create({ domain: '@x/y', license_key: 'KDNA-LIC-test' });
-    const res = await httpJson(ctx, 'POST', '/v1/entitlements/activate', {
+    const res = await httpJson(ctx, 'POST', '/entitlements/activate', {
       domain: '@x/different-domain',
       license_key: 'KDNA-LIC-test',
     });
@@ -134,7 +134,7 @@ test('Story 24: /activate rejects a license_key that does not match the domain',
 test('Story 24: /sync refreshes last_checked_at and returns a signed record', async () => {
   await withServer({}, async (ctx, dataDir, store) => {
     store.create({ domain: '@x/y', license_key: 'KDNA-LIC-test' });
-    const res = await httpJson(ctx, 'POST', '/v1/entitlements/sync', {
+    const res = await httpJson(ctx, 'POST', '/entitlements/sync', {
       domain: '@x/y',
       license_key: 'KDNA-LIC-test',
     });
@@ -158,7 +158,7 @@ test('Story 24: /activate and /sync reject expired licenses', async () => {
       expires_at: '2026-01-02T00:00:00.000Z',
     });
 
-    const activate = await httpJson(ctx, 'POST', '/v1/entitlements/activate', {
+    const activate = await httpJson(ctx, 'POST', '/entitlements/activate', {
       domain: '@x/y',
       license_key: 'KDNA-LIC-expired',
     });
@@ -166,7 +166,7 @@ test('Story 24: /activate and /sync reject expired licenses', async () => {
     const activateBody = await activate.json();
     assert.equal(activateBody.error.code, 'LICENSE_EXPIRED');
 
-    const sync = await httpJson(ctx, 'POST', '/v1/entitlements/sync', {
+    const sync = await httpJson(ctx, 'POST', '/entitlements/sync', {
       domain: '@x/y',
       license_key: 'KDNA-LIC-expired',
     });
@@ -179,7 +179,7 @@ test('Story 24: /activate and /sync reject expired licenses', async () => {
 test('Story 24: /revoke without admin token returns 401 UNAUTHORIZED', async () => {
   await withServer({ adminToken: 'secret-admin-token' }, async (ctx, dataDir, store) => {
     store.create({ domain: '@x/y', license_key: 'KDNA-LIC-test' });
-    const res = await httpJson(ctx, 'POST', '/v1/entitlements/revoke', {
+    const res = await httpJson(ctx, 'POST', '/entitlements/revoke', {
       license_id: '...', domain: '@x/y', reason: 'test',
     });
     assert.equal(res.status, 401);
@@ -190,7 +190,7 @@ test('Story 24: /revoke with admin token marks license as revoked; activate retu
   await withServer({ adminToken: 'secret-admin-token' }, async (ctx, dataDir, store) => {
     const rec = store.create({ domain: '@x/y', license_key: 'KDNA-LIC-test' });
     // Revoke
-    const rev = await httpJson(ctx, 'POST', '/v1/entitlements/revoke', {
+    const rev = await httpJson(ctx, 'POST', '/entitlements/revoke', {
       license_id: rec.license_id, domain: '@x/y', reason: 'payment_failed',
     }, { Authorization: 'Bearer secret-admin-token' });
     assert.equal(rev.status, 200);
@@ -198,7 +198,7 @@ test('Story 24: /revoke with admin token marks license as revoked; activate retu
     assert.equal(revBody.ok, true);
     assert.equal(revBody.status, 'revoked');
     // Activate should now fail with LICENSE_REVOKED
-    const act = await httpJson(ctx, 'POST', '/v1/entitlements/activate', {
+    const act = await httpJson(ctx, 'POST', '/entitlements/activate', {
       domain: '@x/y', license_key: 'KDNA-LIC-test',
     });
     assert.equal(act.status, 403);
@@ -207,11 +207,11 @@ test('Story 24: /revoke with admin token marks license as revoked; activate retu
   });
 });
 
-test('Story 24: /v1/entitlements/status returns public metadata without license_key', async () => {
+test('Story 24: /entitlements/status returns public metadata without license_key', async () => {
   await withServer({}, async (ctx, dataDir, store) => {
     const rec = store.create({ domain: '@x/y', license_key: 'KDNA-LIC-test' });
     const qs = new URLSearchParams({ domain: '@x/y', license_id: rec.license_id }).toString();
-    const res = await httpJson(ctx, 'GET', '/v1/entitlements/status?' + qs);
+    const res = await httpJson(ctx, 'GET', '/entitlements/status?' + qs);
     assert.equal(res.status, 200);
     const body = await res.json();
     assert.equal(body.status, 'active');
@@ -224,7 +224,7 @@ test('Story 24: /v1/entitlements/status returns public metadata without license_
 test('Story 24: signed records verify against the server public key (Ed25519 round-trip)', async () => {
   await withServer({}, async (ctx, dataDir, store, keys) => {
     store.create({ domain: '@x/y', license_key: 'KDNA-LIC-test' });
-    const res = await httpJson(ctx, 'POST', '/v1/entitlements/activate', {
+    const res = await httpJson(ctx, 'POST', '/entitlements/activate', {
       domain: '@x/y', license_key: 'KDNA-LIC-test',
     });
     const body = await res.json();
@@ -285,4 +285,20 @@ test('Story 24: CLI --create-license creates a record, --list lists it, --revoke
   } finally {
     fs.rmSync(dataDir, { recursive: true, force: true });
   }
+});
+
+test('removed generation-shaped routes return 404 without aliases', async () => {
+  await withServer({}, async (ctx) => {
+    for (const [method, route] of [
+      ['GET', '/v1/server/identity'],
+      ['POST', '/v1/entitlements/activate'],
+      ['POST', '/v1/entitlements/sync'],
+      ['GET', '/v1/entitlements/status'],
+      ['POST', '/v1/entitlements/revoke'],
+    ]) {
+      const res = await httpJson(ctx, method, route, method === 'POST' ? {} : undefined);
+      assert.equal(res.status, 404, `${method} ${route}`);
+      assert.equal((await res.json()).error.code, 'NOT_FOUND');
+    }
+  });
 });

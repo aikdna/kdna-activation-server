@@ -57,7 +57,7 @@ kdna-activation-server --port 3001 --admin-token "your-secret"
 
 # 4. Test
 curl http://localhost:3001/healthz
-curl -X POST http://localhost:3001/v1/entitlements/activate \
+curl -X POST http://localhost:3001/entitlements/activate \
   -H 'Content-Type: application/json' \
   -d '{"domain":"@yourname/your-asset","license_key":"KDNA-LIC-customer-1"}'
 ```
@@ -72,16 +72,16 @@ That's it. No registration, no phone-home, no KDNA Inc. URL.
 
 Health check. Returns 200 with server metadata.
 
-### `GET /v1/server/identity`
+### `GET /server/identity`
 
 Returns the server's Ed25519 public key (PEM, hex, and
 fingerprint). Clients use this to verify that an entitlement
 record was really signed by this server.
 
-### `POST /v1/entitlements/activate`
+### `POST /entitlements/activate`
 
 Activates a license. Returns a signed entitlement record
-(cryptographically verifiable against `/v1/server/identity`).
+(cryptographically verifiable against `/server/identity`).
 
 Request body:
 
@@ -104,13 +104,13 @@ Errors:
 - `LICENSE_REVOKED` (403) — license has been revoked
 - `LICENSE_EXPIRED` (403) — `expires_at` is in the past
 
-### `POST /v1/entitlements/sync`
+### `POST /entitlements/sync`
 
 Refreshes the entitlement state (updates `last_checked_at` and
 `offline_valid_until`). Returns the signed record. Same
 errors as `/activate`.
 
-### `POST /v1/entitlements/revoke` (admin)
+### `POST /entitlements/revoke` (admin)
 
 Revokes a license. Requires an `Authorization: Bearer
 <admin-token>` header. The admin token is set at server
@@ -127,7 +127,7 @@ Request body:
 }
 ```
 
-### `GET /v1/entitlements/status?domain=...&license_id=...`
+### `GET /entitlements/status?domain=...&license_id=...`
 
 Introspection. Returns public entitlement metadata (unsigned,
 for introspection only) and does not include `license_key`.
@@ -173,7 +173,7 @@ mode 0600.
   NOT log or persist it beyond the local activation file.
 - **Records are signed.** Every `/activate` and `/sync`
   response is signed with the server's Ed25519 key. Clients
-  can verify against `/v1/server/identity`.
+  can verify against `/server/identity`.
 
 ---
 

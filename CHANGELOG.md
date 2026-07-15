@@ -1,8 +1,18 @@
 # Changelog
 
+## 0.2.0 (2026-07-16)
+
+- Replace generation-shaped HTTP paths with responsibility routes for server
+  identity and entitlement activation, synchronization, status, and
+  revocation.
+- Remove the former paths instead of retaining compatibility aliases; hostile
+  integration coverage verifies that every removed path returns 404.
+- Present package versions as natural SemVer coordinates without a
+  generation-style prefix.
+
 ## 0.1.2 (2026-07-13)
 
-- Publish a versioned, reproducible package after the unused `v0.1.1` tag was
+- Publish a versioned, reproducible package after the unused `0.1.1` release tag was
   found to still contain package version 0.1.0.
 - Clarify that this repository is the legacy self-hosted license-key/receipt
   reference server. It is not an RFC-0019 account/device grant issuer and does

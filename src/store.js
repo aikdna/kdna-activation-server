@@ -4,7 +4,7 @@
  * Per docs/REMOTE_MODE.md and specs/kdna-entitlement-api.md,
  * the activation server stores entitlement records. The design
  * contract calls for SQLite ("zero external dependencies for the
- * simplest deployment path"). The v0.1.0 implementation uses a
+ * simplest deployment path"). The 0.1.0 implementation uses a
  * single JSON file (one file per license_id) for the simplest
  * deployment path. A future version can swap in SQLite without
  * changing the public API.

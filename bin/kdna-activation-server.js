@@ -46,7 +46,7 @@ function parseArgs(argv) {
 }
 
 function help() {
-  return `kdna-activation-server v${pkg.version} — self-hostable activation server
+  return `kdna-activation-server ${pkg.version} — self-hostable activation server
 
 Usage:
   kdna-activation-server [serve options]
@@ -60,7 +60,7 @@ Server options:
   --data-dir <path>      Where to store entitlement records +
                          server keypair. Default
                          ~/.kdna/activation-server.
-  --admin-token <secret> Bearer token for the /v1/entitlements/revoke
+  --admin-token <secret> Bearer token for the /entitlements/revoke
                          endpoint. If unset, /revoke returns 401.
                          Set this if you want to be able to revoke
                          licenses via HTTP.
@@ -151,15 +151,15 @@ async function main() {
   });
 
   process.stdout.write(
-    `kdna-activation-server v${pkg.version} listening on http://${host}:${actualPort}\n` +
+    `kdna-activation-server ${pkg.version} listening on http://${host}:${actualPort}\n` +
       `  data_dir:     ${dd}\n` +
       `  admin_token:  ${args['admin-token'] ? '(configured)' : '(NOT set — /revoke returns 401)'}\n` +
       `  public_key:   ${keys.publicPem.length} bytes (PEM, ed25519)\n` +
       `\n` +
       `Try:\n` +
       `  curl http://${host}:${actualPort}/healthz\n` +
-      `  curl http://${host}:${actualPort}/v1/server/identity\n` +
-      `  curl -X POST http://${host}:${actualPort}/v1/entitlements/activate \\\n` +
+      `  curl http://${host}:${actualPort}/server/identity\n` +
+      `  curl -X POST http://${host}:${actualPort}/entitlements/activate \\\n` +
       `    -H 'Content-Type: application/json' \\\n` +
       `    -d '{"domain":"@yourname/your-asset","license_key":"KDNA-LIC-..."}'\n` +
       `\n` +

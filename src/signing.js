@@ -23,7 +23,7 @@
  *
  * Same rules apply here: the server generates its own key.
  * Clients verify against the server's public key (which the
- * server advertises at GET /v1/server/identity).
+ * server advertises at GET /server/identity).
  */
 
 'use strict';

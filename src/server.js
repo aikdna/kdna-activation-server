@@ -3,25 +3,25 @@
  *
  * Implements the four endpoints from specs/kdna-entitlement-api.md:
  *
- *   POST /v1/entitlements/activate
+ *   POST /entitlements/activate
  *     Body: { domain, license_key, machine_fingerprint?, ... }
  *     Response: activation record (status: "active")
  *     Errors: INVALID_LICENSE_KEY, LICENSE_REVOKED, ...
  *
- *   POST /v1/entitlements/sync
+ *   POST /entitlements/sync
  *     Body: { domain, license_key, license_id? }
  *     Response: same as activation (refreshes last_checked_at)
  *
- *   POST /v1/entitlements/revoke
+ *   POST /entitlements/revoke
  *     Auth: Bearer <admin-token>
  *     Body: { license_id, domain, reason, revoked_by? }
  *     Response: { ok: true, license_id, status: "revoked", ... }
  *
- *   GET /v1/entitlements/status?domain=...&license_key=...
+ *   GET /entitlements/status?domain=...&license_key=...
  *     Response: activation record
  *
  * Plus:
- *   GET /v1/server/identity
+ *   GET /server/identity
  *     Response: { public_key_pem, public_key_fingerprint,
  *                 public_key_hex, ... }
  *     Lets clients verify signed entitlement records.
@@ -72,7 +72,7 @@ function makeRequestHandler(opts) {
 
     // Server identity — the public key clients use to verify
     // signed entitlement records. No auth (this is a public key).
-    if (req.method === 'GET' && url.pathname === '/v1/server/identity') {
+    if (req.method === 'GET' && url.pathname === '/server/identity') {
       const rawHex = publicKeyRawHex(keys.publicPem);
       json(res, 200, {
         server: '@aikdna/kdna-activation-server',
@@ -87,7 +87,7 @@ function makeRequestHandler(opts) {
     }
 
     // Activation
-    if (req.method === 'POST' && url.pathname === '/v1/entitlements/activate') {
+    if (req.method === 'POST' && url.pathname === '/entitlements/activate') {
       await readJson(req, res, async (body) => {
         const { domain, license_key } = body || {};
         if (!domain) return jsonError(res, 400, 'MISSING_DOMAIN', 'domain is required');
@@ -118,7 +118,7 @@ function makeRequestHandler(opts) {
     }
 
     // Sync
-    if (req.method === 'POST' && url.pathname === '/v1/entitlements/sync') {
+    if (req.method === 'POST' && url.pathname === '/entitlements/sync') {
       await readJson(req, res, async (body) => {
         const { domain, license_key, license_id } = body || {};
         let rec = null;
@@ -147,7 +147,7 @@ function makeRequestHandler(opts) {
     }
 
     // Status (introspection; lightweight)
-    if (req.method === 'GET' && url.pathname === '/v1/entitlements/status') {
+    if (req.method === 'GET' && url.pathname === '/entitlements/status') {
       const domain = url.searchParams.get('domain');
       const licenseKey = url.searchParams.get('license_key');
       const licenseId = url.searchParams.get('license_id');
@@ -161,7 +161,7 @@ function makeRequestHandler(opts) {
     }
 
     // Revoke (admin-only, bearer token)
-    if (req.method === 'POST' && url.pathname === '/v1/entitlements/revoke') {
+    if (req.method === 'POST' && url.pathname === '/entitlements/revoke') {
       const auth = req.headers.authorization || '';
       if (!adminToken || !auth.startsWith('Bearer ') || auth.slice(7) !== adminToken) {
         return jsonError(res, 401, 'UNAUTHORIZED',

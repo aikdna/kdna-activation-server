@@ -1,6 +1,6 @@
 {
   "name": "@aikdna/kdna-activation-server",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "description": "KDNA activation server — self-hostable HTTP server for license activation, sync, revocation. Implements specs/kdna-entitlement-api.md and the self-hosting invariant from docs/REMOTE_MODE.md (Story 24).",
   "type": "commonjs",
   "main": "src/index.js",
