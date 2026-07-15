@@ -42,19 +42,55 @@ function makeStore(dataDir) {
   fs.mkdirSync(dataDir, { recursive: true, mode: 0o700 });
 
   function recordPath(licenseId) {
-    if (!licenseId || !/^[A-Za-z0-9_\-:.]{1,128}$/.test(licenseId)) {
-      throw new Error(`invalid license_id: ${licenseId}`);
-    }
+    validateLicenseId(licenseId);
+    const encoded = encodeLicenseId(licenseId);
+    return path.join(dataDir, `record~${encoded}.json`);
+  }
+
+  function legacyRecordPath(licenseId) {
+    validateLicenseId(licenseId);
     return path.join(dataDir, `${licenseId.replace(/[^A-Za-z0-9_\-]/g, '_')}.json`);
   }
 
+  function recordFiles() {
+    return fs
+      .readdirSync(dataDir)
+      .filter((file) => file.endsWith('.json'))
+      .sort((left, right) => {
+        const leftCanonical = left.startsWith('record~') ? 1 : 0;
+        const rightCanonical = right.startsWith('record~') ? 1 : 0;
+        return rightCanonical - leftCanonical || left.localeCompare(right);
+      });
+  }
+
+  function readRecordFile(filePath) {
+    return JSON.parse(fs.readFileSync(filePath, 'utf8'));
+  }
+
   function get(licenseId) {
-    const p = recordPath(licenseId);
-    if (!fs.existsSync(p)) return null;
+    const canonicalPath = recordPath(licenseId);
+    if (fs.existsSync(canonicalPath)) {
+      try {
+        const rec = readRecordFile(canonicalPath);
+        if (rec.license_id !== licenseId) {
+          throw new Error('canonical record identifier does not match its storage key');
+        }
+        return rec;
+      } catch (e) {
+        throw new Error(`failed to read ${canonicalPath}: ${e.message}`);
+      }
+    }
+
+    const legacyPath = legacyRecordPath(licenseId);
+    if (!fs.existsSync(legacyPath)) return null;
     try {
-      return JSON.parse(fs.readFileSync(p, 'utf8'));
+      const rec = readRecordFile(legacyPath);
+      // Legacy filenames were not one-to-one: ':' and '.' both became '_'.
+      // A colliding file for another identifier is not an alias.
+      if (rec.license_id !== licenseId) return null;
+      return rec;
     } catch (e) {
-      throw new Error(`failed to read ${p}: ${e.message}`);
+      throw new Error(`failed to read ${legacyPath}: ${e.message}`);
     }
   }
 
@@ -63,10 +99,13 @@ function makeStore(dataDir) {
     // domain + license_key. We index license_key by scanning
     // all records (acceptable for self-hosted single-creator
     // scale; a future version can use a secondary index).
-    const files = fs.readdirSync(dataDir).filter((f) => f.endsWith('.json'));
+    const files = recordFiles();
+    const seen = new Set();
     for (const f of files) {
       try {
-        const rec = JSON.parse(fs.readFileSync(path.join(dataDir, f), 'utf8'));
+        const rec = readRecordFile(path.join(dataDir, f));
+        if (!rec.license_id || seen.has(rec.license_id)) continue;
+        seen.add(rec.license_id);
         if (rec.license_key === licenseKey) return rec;
       } catch (_) {
         // ignore malformed files
@@ -81,7 +120,32 @@ function makeStore(dataDir) {
     }
     const p = recordPath(record.license_id);
     record.updated_at = new Date().toISOString();
-    fs.writeFileSync(p, JSON.stringify(record, null, 2) + '\n', { mode: 0o600 });
+    const tmp = `${p}.${process.pid}.${crypto.randomBytes(6).toString('hex')}.tmp`;
+    try {
+      fs.writeFileSync(tmp, JSON.stringify(record, null, 2) + '\n', {
+        mode: 0o600,
+        flag: 'wx',
+      });
+      fs.renameSync(tmp, p);
+      fs.chmodSync(p, 0o600);
+    } finally {
+      fs.rmSync(tmp, { force: true });
+    }
+
+    // Successful writes migrate an exact legacy record to the collision-free
+    // filename. Never delete a colliding legacy file whose content belongs to
+    // another identifier.
+    const legacyPath = legacyRecordPath(record.license_id);
+    if (legacyPath !== p && fs.existsSync(legacyPath)) {
+      try {
+        if (readRecordFile(legacyPath).license_id === record.license_id) {
+          fs.rmSync(legacyPath, { force: true });
+        }
+      } catch (_) {
+        // Leave malformed legacy state for operator recovery; the canonical
+        // record has already been written safely.
+      }
+    }
     return record;
   }
 
@@ -151,10 +215,14 @@ function makeStore(dataDir) {
 
   function list() {
     const out = [];
-    const files = fs.readdirSync(dataDir).filter((f) => f.endsWith('.json'));
+    const files = recordFiles();
+    const seen = new Set();
     for (const f of files) {
       try {
-        out.push(JSON.parse(fs.readFileSync(path.join(dataDir, f), 'utf8')));
+        const rec = readRecordFile(path.join(dataDir, f));
+        if (!rec.license_id || seen.has(rec.license_id)) continue;
+        seen.add(rec.license_id);
+        out.push(rec);
       } catch (_) {
         // ignore
       }
@@ -221,6 +289,32 @@ function makeStore(dataDir) {
     compareAndBindMachine,
     dataDir,
   };
+}
+
+function validateLicenseId(licenseId) {
+  if (!licenseId || !/^[A-Za-z0-9_\-:.]{1,128}$/.test(licenseId)) {
+    throw new Error(`invalid license_id: ${licenseId}`);
+  }
+}
+
+function encodeLicenseId(licenseId) {
+  const alphabet = '0123456789abcdefghijklmnopqrstuv';
+  const bytes = Buffer.from(licenseId, 'ascii');
+  let encoded = '';
+  let accumulator = 0;
+  let bitCount = 0;
+
+  for (const byte of bytes) {
+    accumulator = (accumulator << 8) | byte;
+    bitCount += 8;
+    while (bitCount >= 5) {
+      bitCount -= 5;
+      encoded += alphabet[(accumulator >>> bitCount) & 31];
+      accumulator &= (1 << bitCount) - 1;
+    }
+  }
+  if (bitCount > 0) encoded += alphabet[(accumulator << (5 - bitCount)) & 31];
+  return encoded;
 }
 
 function equalBindingDigests(left, right) {

@@ -10,6 +10,8 @@
   entitlement record.
 - Require status lookups to use canonical public domain and license identifiers,
   and reject secret license keys in query strings.
+- Replace collision-prone sanitized license filenames with an exact encoded
+  mapping, retaining fail-closed reads and on-write migration for legacy files.
 - Replace generation-shaped HTTP paths with responsibility routes for server
   identity and entitlement activation, synchronization, status, and
   revocation.

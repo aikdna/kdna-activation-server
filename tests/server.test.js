@@ -47,6 +47,12 @@ function makeDataDir() {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'kdna-s24-'));
 }
 
+function recordJsonFiles(dataDir) {
+  return fs.readdirSync(dataDir)
+    .filter((name) => name.endsWith('.json'))
+    .map((name) => path.join(dataDir, name));
+}
+
 async function withServer(opts, fn) {
   const dataDir = makeDataDir();
   const store = makeStore(dataDir);
@@ -313,7 +319,9 @@ test('first activation stores only a keyed binding digest and is idempotent for 
     assert.equal(stored.machine_fingerprint, undefined);
     assert.match(stored.machine_binding_digest, /^[0-9a-f]{64}$/);
     assert.notEqual(stored.machine_binding_digest, MACHINE_A);
-    const disk = fs.readFileSync(path.join(dataDir, `${rec.license_id}.json`), 'utf8');
+    const disk = recordJsonFiles(dataDir)
+      .map((file) => fs.readFileSync(file, 'utf8'))
+      .join('\n');
     assert.equal(disk.includes(MACHINE_A), false);
 
     const wrongMachine = await httpJson(ctx, 'POST', '/entitlements/activate', {
@@ -478,7 +486,16 @@ test('unbound licenses keep no-binding activation, sync, and status semantics', 
 test('a legacy raw binding migrates only after an exact machine match', async () => {
   await withServer({}, async (ctx, dataDir, store) => {
     const rec = store.create({ domain: '@x/legacy', license_key: 'KDNA-LIC-legacy' });
-    store.put({ ...rec, machine_fingerprint: MACHINE_A });
+    for (const file of recordJsonFiles(dataDir)) fs.rmSync(file);
+    const legacyPath = path.join(
+      dataDir,
+      `${rec.license_id.replace(/[^A-Za-z0-9_\-]/g, '_')}.json`,
+    );
+    fs.writeFileSync(
+      legacyPath,
+      JSON.stringify({ ...rec, machine_fingerprint: MACHINE_A }, null, 2) + '\n',
+      { mode: 0o600 },
+    );
 
     const mismatch = await httpJson(ctx, 'POST', '/entitlements/activate', {
       domain: rec.domain, license_key: rec.license_key, machine_fingerprint: MACHINE_B,
@@ -493,7 +510,109 @@ test('a legacy raw binding migrates only after an exact machine match', async ()
     const stored = store.get(rec.license_id);
     assert.equal(stored.machine_fingerprint, undefined);
     assert.match(stored.machine_binding_digest, /^[0-9a-f]{64}$/);
+    assert.equal(fs.existsSync(legacyPath), false);
+    assert.equal(recordJsonFiles(dataDir).length, 1);
   });
+});
+
+test('license identifiers have collision-free storage and exact lookup semantics', async () => {
+  await withServer({}, async (ctx, dataDir, store) => {
+    const colon = store.create({
+      domain: '@x/colon',
+      license_key: 'KDNA-LIC-colon',
+      license_id: 'lic:alias',
+    });
+    const legacyCollisionPath = path.join(dataDir, 'lic_alias.json');
+    fs.renameSync(recordJsonFiles(dataDir)[0], legacyCollisionPath);
+    const dot = store.create({
+      domain: '@x/dot',
+      license_key: 'KDNA-LIC-dot',
+      license_id: 'lic.alias',
+      require_machine_binding: false,
+    });
+    const upper = store.create({
+      domain: '@x/upper',
+      license_key: 'KDNA-LIC-upper',
+      license_id: 'LIC:ALIAS',
+      require_machine_binding: false,
+    });
+    assert.equal(recordJsonFiles(dataDir).length, 3);
+    assert.equal(store.get(colon.license_id).license_key, colon.license_key);
+    assert.equal(store.get(dot.license_id).license_key, dot.license_key);
+    assert.equal(store.get(upper.license_id).license_key, upper.license_key);
+    assert.deepEqual(store.list().map((record) => record.license_id).sort(), [
+      'LIC:ALIAS',
+      'lic.alias',
+      'lic:alias',
+    ]);
+    assert.equal(fs.existsSync(legacyCollisionPath), true);
+
+    const activate = await httpJson(ctx, 'POST', '/entitlements/activate', {
+      domain: colon.domain,
+      license_key: colon.license_key,
+      machine_fingerprint: MACHINE_A,
+    });
+    assert.equal(activate.status, 200);
+    assert.equal(fs.existsSync(legacyCollisionPath), false);
+    assert.equal(recordJsonFiles(dataDir).length, 3);
+
+    const wrongStatus = await httpJson(
+      ctx,
+      'GET',
+      `/entitlements/status?${new URLSearchParams({
+        domain: colon.domain,
+        license_id: dot.license_id,
+        machine_fingerprint: MACHINE_A,
+      })}`,
+    );
+    assert.equal(wrongStatus.status, 404);
+    assert.equal((await wrongStatus.json()).error.code, 'NOT_FOUND');
+
+    const wrongSync = await httpJson(ctx, 'POST', '/entitlements/sync', {
+      domain: colon.domain,
+      license_key: colon.license_key,
+      license_id: dot.license_id,
+      machine_fingerprint: MACHINE_A,
+    });
+    assert.equal(wrongSync.status, 404);
+    assert.equal((await wrongSync.json()).error.code, 'INVALID_LICENSE_KEY');
+  });
+});
+
+test('canonical records are authoritative and never fall back after corruption', () => {
+  const dataDir = makeDataDir();
+  try {
+    const store = makeStore(dataDir);
+    const rec = store.create({
+      domain: '@x/canonical',
+      license_key: 'KDNA-LIC-canonical',
+      license_id: 'lic_canonical',
+    });
+    const canonicalPath = recordJsonFiles(dataDir)[0];
+    const legacyPath = path.join(dataDir, `${rec.license_id}.json`);
+    fs.writeFileSync(
+      legacyPath,
+      JSON.stringify({ ...rec, license_key: 'KDNA-LIC-stale' }, null, 2) + '\n',
+      { mode: 0o600 },
+    );
+
+    assert.equal(store.get(rec.license_id).license_key, rec.license_key);
+    assert.equal(store.getByKey('KDNA-LIC-stale'), null);
+    assert.equal(store.list().length, 1);
+    assert.equal(store.list()[0].license_key, rec.license_key);
+
+    fs.writeFileSync(
+      canonicalPath,
+      JSON.stringify({ ...rec, license_id: 'lic_other' }, null, 2) + '\n',
+      { mode: 0o600 },
+    );
+    assert.throws(
+      () => store.get(rec.license_id),
+      /canonical record identifier does not match its storage key/,
+    );
+  } finally {
+    fs.rmSync(dataDir, { recursive: true, force: true });
+  }
 });
 
 test('a malformed legacy raw binding cannot be claimed by a new machine', async () => {

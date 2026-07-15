@@ -196,6 +196,10 @@ mode 0600.
   derives a purpose-separated HMAC key from its local private key and stores
   only the keyed binding digest. A matching request migrates an older raw
   fingerprint record in place; malformed legacy bindings fail closed.
+- **License record filenames are collision-free.** Each validated license
+  identifier has one encoded storage path. Exact legacy records migrate on
+  write, while a different identifier that shared an older sanitized filename
+  is never treated as an alias.
 
 ---
 
