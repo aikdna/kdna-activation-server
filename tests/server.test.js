@@ -610,9 +610,80 @@ test('canonical records are authoritative and never fall back after corruption',
       () => store.get(rec.license_id),
       /canonical record identifier does not match its storage key/,
     );
+    assert.equal(store.getByKey(rec.license_key), null);
+    assert.deepEqual(store.list(), []);
   } finally {
     fs.rmSync(dataDir, { recursive: true, force: true });
   }
+});
+
+test('misplaced JSON is never an entitlement authority, including for unbound licenses', async () => {
+  await withServer({}, async (ctx, dataDir, store) => {
+    const rec = store.create({
+      domain: '@x/misplaced',
+      license_key: 'KDNA-LIC-misplaced',
+      license_id: 'lic_misplaced',
+      require_machine_binding: false,
+    });
+    const authoritative = JSON.parse(fs.readFileSync(recordJsonFiles(dataDir)[0], 'utf8'));
+    for (const file of recordJsonFiles(dataDir)) fs.rmSync(file);
+    fs.writeFileSync(
+      path.join(dataDir, 'arbitrary.json'),
+      JSON.stringify(authoritative, null, 2) + '\n',
+      { mode: 0o600 },
+    );
+
+    assert.equal(store.get(rec.license_id), null);
+    assert.equal(store.getByKey(rec.license_key), null);
+    assert.deepEqual(store.list(), []);
+
+    const activate = await httpJson(ctx, 'POST', '/entitlements/activate', {
+      domain: rec.domain,
+      license_key: rec.license_key,
+    });
+    assert.equal(activate.status, 404);
+    assert.equal((await activate.json()).error.code, 'INVALID_LICENSE_KEY');
+
+    const sync = await httpJson(ctx, 'POST', '/entitlements/sync', {
+      domain: rec.domain,
+      license_key: rec.license_key,
+    });
+    assert.equal(sync.status, 404);
+    assert.equal((await sync.json()).error.code, 'INVALID_LICENSE_KEY');
+  });
+});
+
+test('malformed canonical state cannot downgrade to an exact legacy record', async () => {
+  await withServer({}, async (ctx, dataDir, store) => {
+    const rec = store.create({
+      domain: '@x/no-downgrade',
+      license_key: 'KDNA-LIC-no-downgrade',
+      license_id: 'lic_no_downgrade',
+      require_machine_binding: false,
+    });
+    const canonicalPath = recordJsonFiles(dataDir)[0];
+    const legacyPath = path.join(dataDir, `${rec.license_id}.json`);
+    fs.writeFileSync(legacyPath, JSON.stringify(rec, null, 2) + '\n', { mode: 0o600 });
+    fs.writeFileSync(canonicalPath, '{ malformed', { mode: 0o600 });
+
+    assert.throws(() => store.get(rec.license_id), /failed to read/);
+    assert.equal(store.getByKey(rec.license_key), null);
+    assert.deepEqual(store.list(), []);
+
+    const activate = await httpJson(ctx, 'POST', '/entitlements/activate', {
+      domain: rec.domain,
+      license_key: rec.license_key,
+    });
+    assert.equal(activate.status, 404);
+    assert.equal((await activate.json()).error.code, 'INVALID_LICENSE_KEY');
+
+    const sync = await httpJson(ctx, 'POST', '/entitlements/sync', {
+      domain: rec.domain,
+      license_key: rec.license_key,
+    });
+    assert.equal(sync.status, 404);
+    assert.equal((await sync.json()).error.code, 'INVALID_LICENSE_KEY');
+  });
 });
 
 test('a malformed legacy raw binding cannot be claimed by a new machine', async () => {

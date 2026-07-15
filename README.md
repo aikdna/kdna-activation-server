@@ -199,7 +199,8 @@ mode 0600.
 - **License record filenames are collision-free.** Each validated license
   identifier has one encoded storage path. Exact legacy records migrate on
   write, while a different identifier that shared an older sanitized filename
-  is never treated as an alias.
+  is never treated as an alias. Directory scans only discover identifiers;
+  activation, listing, and key lookup always re-read the authoritative path.
 
 ---
 

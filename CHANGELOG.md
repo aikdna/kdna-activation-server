@@ -11,7 +11,8 @@
 - Require status lookups to use canonical public domain and license identifiers,
   and reject secret license keys in query strings.
 - Replace collision-prone sanitized license filenames with an exact encoded
-  mapping, retaining fail-closed reads and on-write migration for legacy files.
+  mapping, retaining fail-closed reads and on-write migration for legacy files;
+  scanned JSON is never trusted without an authoritative-path re-read.
 - Replace generation-shaped HTTP paths with responsibility routes for server
   identity and entitlement activation, synchronization, status, and
   revocation.

@@ -67,6 +67,29 @@ function makeStore(dataDir) {
     return JSON.parse(fs.readFileSync(filePath, 'utf8'));
   }
 
+  function authoritativeRecords() {
+    const records = [];
+    const seen = new Set();
+    for (const file of recordFiles()) {
+      try {
+        // Scanned files can only suggest an identifier. The record returned to
+        // callers must be re-read through get(), which alone understands the
+        // canonical path, exact legacy path, and fail-closed precedence rules.
+        const candidate = readRecordFile(path.join(dataDir, file));
+        if (!candidate.license_id || seen.has(candidate.license_id)) continue;
+        const authoritative = get(candidate.license_id);
+        if (!authoritative || seen.has(authoritative.license_id)) continue;
+        seen.add(authoritative.license_id);
+        records.push(authoritative);
+      } catch (_) {
+        // Malformed, misplaced, or internally inconsistent files are not
+        // records. In particular, get() never downgrades a bad canonical file
+        // to legacy content.
+      }
+    }
+    return records;
+  }
+
   function get(licenseId) {
     const canonicalPath = recordPath(licenseId);
     if (fs.existsSync(canonicalPath)) {
@@ -99,17 +122,8 @@ function makeStore(dataDir) {
     // domain + license_key. We index license_key by scanning
     // all records (acceptable for self-hosted single-creator
     // scale; a future version can use a secondary index).
-    const files = recordFiles();
-    const seen = new Set();
-    for (const f of files) {
-      try {
-        const rec = readRecordFile(path.join(dataDir, f));
-        if (!rec.license_id || seen.has(rec.license_id)) continue;
-        seen.add(rec.license_id);
-        if (rec.license_key === licenseKey) return rec;
-      } catch (_) {
-        // ignore malformed files
-      }
+    for (const rec of authoritativeRecords()) {
+      if (rec.license_key === licenseKey) return rec;
     }
     return null;
   }
@@ -214,20 +228,7 @@ function makeStore(dataDir) {
   }
 
   function list() {
-    const out = [];
-    const files = recordFiles();
-    const seen = new Set();
-    for (const f of files) {
-      try {
-        const rec = readRecordFile(path.join(dataDir, f));
-        if (!rec.license_id || seen.has(rec.license_id)) continue;
-        seen.add(rec.license_id);
-        out.push(rec);
-      } catch (_) {
-        // ignore
-      }
-    }
-    return out;
+    return authoritativeRecords();
   }
 
   function create({ domain, license_key, license_id, issued_to, require_machine_binding, require_online_check, offline_grace_days, allowed_agents, ttl_days, issued_at }) {
