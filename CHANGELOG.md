@@ -2,6 +2,22 @@
 
 ## 0.2.0 (2026-07-16)
 
+- Align entitlement `domain` values atomically with the canonical Core
+  manifest `asset_id` grammar across creation, activation, sync, status,
+  revocation, and stored-record validation. Package-style scoped identities
+  are no longer accepted as an alternate format.
+- Treat `license_key` as a request-only secret: omit it from signed activation
+  and sync records, status responses, command output, errors, health metadata,
+  and public examples.
+- Require origin-form request targets and one valid Host header without using
+  that header for route resolution; reject credentials, paths, queries,
+  fragments, and absolute targets.
+- Count the 64 KiB JSON limit in raw bytes, require valid UTF-8, emit exactly
+  one oversized-body response, and keep JSON/parser and handler details out of
+  public errors.
+- Compare the configured admin bearer secret through a fixed-size digest and
+  preserve indistinguishable not-found responses for absent and mismatched
+  revocation records.
 - Enforce the default machine-binding policy during activation, sync, and
   status checks; persist only a purpose-separated keyed digest and migrate
   valid legacy raw fingerprints after an exact match.

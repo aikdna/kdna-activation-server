@@ -11,8 +11,8 @@
  *
  * Each record has the shape documented in
  * specs/kdna-entitlement-api.md §10 (Local Activation File).
- * The activation server returns the same shape (plus optional
- * Ed25519 signature) on /activate and /sync endpoints.
+ * The activation server signs a public projection of this shape on /activate
+ * and /sync. Request secrets and server-only binding digests remain internal.
  *
  * The store is the SOURCE OF TRUTH for entitlement state. The
  * CLI's local copy at ~/.kdna/licenses/<domain>.json is a
@@ -30,6 +30,7 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 
 const MACHINE_BINDING_DIGEST_RE = /^[0-9a-f]{64}$/;
+const CANONICAL_DOMAIN_RE = /^[A-Za-z][A-Za-z0-9_-]*(:[A-Za-z0-9_.-]+)+$/;
 
 const DEFAULT_DATA_DIR = path.join(
   process.env.HOME || process.env.USERPROFILE || '.',
@@ -95,10 +96,7 @@ function makeStore(dataDir) {
     if (fs.existsSync(canonicalPath)) {
       try {
         const rec = readRecordFile(canonicalPath);
-        if (rec.license_id !== licenseId) {
-          throw new Error('canonical record identifier does not match its storage key');
-        }
-        return rec;
+        return validateStoredRecord(rec, licenseId);
       } catch (e) {
         throw new Error(`failed to read ${canonicalPath}: ${e.message}`);
       }
@@ -111,19 +109,21 @@ function makeStore(dataDir) {
       // Legacy filenames were not one-to-one: ':' and '.' both became '_'.
       // A colliding file for another identifier is not an alias.
       if (rec.license_id !== licenseId) return null;
-      return rec;
+      return validateStoredRecord(rec, licenseId);
     } catch (e) {
       throw new Error(`failed to read ${legacyPath}: ${e.message}`);
     }
   }
 
-  function getByKey(licenseKey) {
+  function getByKey(licenseKey, domain) {
     // The store is keyed by license_id. The CLI sends both
     // domain + license_key. We index license_key by scanning
     // all records (acceptable for self-hosted single-creator
     // scale; a future version can use a secondary index).
+    if (typeof licenseKey !== 'string' || licenseKey.length === 0) return null;
+    if (!isCanonicalDomain(domain)) return null;
     for (const rec of authoritativeRecords()) {
-      if (rec.license_key === licenseKey) return rec;
+      if (rec.domain === domain && equalSecrets(rec.license_key, licenseKey)) return rec;
     }
     return null;
   }
@@ -132,6 +132,9 @@ function makeStore(dataDir) {
     if (!record || !record.license_id) {
       throw new Error('record.license_id is required');
     }
+    validateLicenseId(record.license_id);
+    validateDomain(record.domain);
+    validateLicenseSecret(record.license_key);
     const p = recordPath(record.license_id);
     record.updated_at = new Date().toISOString();
     const tmp = `${p}.${process.pid}.${crypto.randomBytes(6).toString('hex')}.tmp`;
@@ -232,8 +235,8 @@ function makeStore(dataDir) {
   }
 
   function create({ domain, license_key, license_id, issued_to, require_machine_binding, require_online_check, offline_grace_days, allowed_agents, ttl_days, issued_at }) {
-    if (!domain) throw new Error('domain is required');
-    if (!license_key) throw new Error('license_key is required');
+    validateDomain(domain);
+    validateLicenseSecret(license_key);
     if (!license_id) license_id = `lic_${crypto.randomBytes(8).toString('hex')}`;
 
     const record = {
@@ -298,6 +301,43 @@ function validateLicenseId(licenseId) {
   }
 }
 
+function isCanonicalDomain(domain) {
+  return typeof domain === 'string' && CANONICAL_DOMAIN_RE.test(domain);
+}
+
+function validateDomain(domain) {
+  if (domain === undefined || domain === null || domain === '') {
+    throw new Error('domain is required');
+  }
+  if (!isCanonicalDomain(domain)) {
+    throw new Error('domain must be a canonical KDNA asset_id');
+  }
+  return domain;
+}
+
+function validateLicenseSecret(licenseKey) {
+  if (licenseKey === undefined || licenseKey === null || licenseKey === '') {
+    throw new Error('license_key is required');
+  }
+  if (typeof licenseKey !== 'string') {
+    throw new Error('license_key must be a non-empty string');
+  }
+  return licenseKey;
+}
+
+function validateStoredRecord(record, expectedLicenseId) {
+  if (!record || typeof record !== 'object' || Array.isArray(record)) {
+    throw new Error('stored entitlement record must be a JSON object');
+  }
+  validateLicenseId(record.license_id);
+  if (record.license_id !== expectedLicenseId) {
+    throw new Error('canonical record identifier does not match its storage key');
+  }
+  validateDomain(record.domain);
+  validateLicenseSecret(record.license_key);
+  return record;
+}
+
 function encodeLicenseId(licenseId) {
   const alphabet = '0123456789abcdefghijklmnopqrstuv';
   const bytes = Buffer.from(licenseId, 'ascii');
@@ -325,4 +365,21 @@ function equalBindingDigests(left, right) {
   return crypto.timingSafeEqual(Buffer.from(left, 'hex'), Buffer.from(right, 'hex'));
 }
 
-module.exports = { makeStore, DEFAULT_DATA_DIR };
+function equalSecrets(left, right) {
+  if (typeof left !== 'string' || typeof right !== 'string') return false;
+  const leftBytes = Buffer.from(left, 'utf8');
+  const rightBytes = Buffer.from(right, 'utf8');
+  const sameLength = leftBytes.length === rightBytes.length;
+  const leftDigest = crypto.createHash('sha256').update(leftBytes).digest();
+  const rightDigest = crypto.createHash('sha256').update(rightBytes).digest();
+  const sameDigest = crypto.timingSafeEqual(leftDigest, rightDigest);
+  return sameLength && sameDigest;
+}
+
+module.exports = {
+  CANONICAL_DOMAIN_RE,
+  DEFAULT_DATA_DIR,
+  isCanonicalDomain,
+  makeStore,
+  validateDomain,
+};

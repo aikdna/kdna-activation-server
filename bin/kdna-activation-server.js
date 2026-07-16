@@ -68,7 +68,9 @@ Server options:
 One-shot commands (do not start the server):
   --create-license '<json>'
                         Create a new license record. The JSON
-                        must contain: domain, license_key.
+                        must contain: domain, license_key. Domain
+                        must use canonical asset_id syntax such as
+                        kdna:creator:asset.
                         Optional: issued_to, ttl_days,
                         require_machine_binding (default true),
                         require_online_check (default true),
@@ -110,7 +112,7 @@ async function main() {
       process.exit(1);
     }
     const rec = store.create(body);
-    process.stdout.write(`Created license:\n  ${JSON.stringify(rec, null, 2)}\n`);
+    process.stdout.write(`Created license:\n  ${JSON.stringify(stripLicenseSecret(rec), null, 2)}\n`);
     return;
   }
   if (args.list) {
@@ -131,7 +133,7 @@ async function main() {
       process.stderr.write(`Error: no license found with id ${args.revoke}\n`);
       process.exit(1);
     }
-    process.stdout.write(`Revoked:\n  ${JSON.stringify(updated, null, 2)}\n`);
+    process.stdout.write(`Revoked:\n  ${JSON.stringify(stripLicenseSecret(updated), null, 2)}\n`);
     return;
   }
 
@@ -161,10 +163,10 @@ async function main() {
       `  curl http://${host}:${actualPort}/server/identity\n` +
       `  curl -X POST http://${host}:${actualPort}/entitlements/activate \\\n` +
       `    -H 'Content-Type: application/json' \\\n` +
-      `    -d '{"domain":"@yourname/your-asset","license_key":"KDNA-LIC-...","machine_fingerprint":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}'\n` +
+      `    -d '{"domain":"kdna:yourname:your-asset","license_key":"<license-secret>","machine_fingerprint":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}'\n` +
       `\n` +
       `Create a license:\n` +
-      `  kdna-activation-server --create-license '{"domain":"@yourname/your-asset","license_key":"KDNA-LIC-test1"}'\n`,
+      `  kdna-activation-server --create-license '{"domain":"kdna:yourname:your-asset","license_key":"<license-secret>"}'\n`,
   );
 
   const shutdown = (signal) => {
@@ -173,6 +175,12 @@ async function main() {
   };
   process.on('SIGINT', () => shutdown('SIGINT'));
   process.on('SIGTERM', () => shutdown('SIGTERM'));
+}
+
+function stripLicenseSecret(record) {
+  const out = { ...record };
+  delete out.license_key;
+  return out;
 }
 
 main().catch((e) => {

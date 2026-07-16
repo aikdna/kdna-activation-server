@@ -29,8 +29,9 @@
  *   GET /healthz
  *     Response: { ok: true, server, version }
  *
- * Layer isolation: the server returns the activation record's
- * fields verbatim. It does NOT add content-trust claims like
+ * Layer isolation: the server returns a signed public entitlement record
+ * without the request-only license secret or internal binding digest. It does
+ * NOT add content-trust claims like
  * "official" or "trusted" — those would contradict the KDNA
  * layer-isolation rules (SPEC §13.1).
  */
@@ -40,7 +41,7 @@
 const http = require('node:http');
 const { URL } = require('node:url');
 const crypto = require('node:crypto');
-const { makeStore } = require('./store');
+const { isCanonicalDomain, makeStore } = require('./store');
 const {
   ensureKeyPair,
   publicKeyFingerprint,
@@ -50,8 +51,9 @@ const {
 } = require('./signing');
 
 const DEFAULT_PORT = 3001;
+const MAX_REQUEST_BODY_BYTES = 64 * 1024;
+const REQUEST_BASE_URL = 'http://kdna.invalid';
 const MACHINE_FINGERPRINT_RE = /^[0-9a-f]{64}$/;
-const STATUS_DOMAIN_RE = /^@[a-z0-9][a-z0-9._-]{0,63}\/[a-z0-9][a-z0-9._-]{0,127}$/;
 const LICENSE_ID_RE = /^[A-Za-z0-9_\-:.]{1,128}$/;
 const MACHINE_BINDING_KEY_SALT = Buffer.from(
   'kdna.activation.machine-binding.hkdf-salt',
@@ -92,7 +94,7 @@ function makeRequestHandler(opts) {
     let byKey;
     let byId;
     try {
-      byKey = licenseKey ? store.getByKey(licenseKey) : null;
+      byKey = licenseKey ? store.getByKey(licenseKey, domain) : null;
       byId = licenseId ? store.get(licenseId) : null;
     } catch {
       return null;
@@ -172,7 +174,18 @@ function makeRequestHandler(opts) {
   }
 
   async function handle(req, res) {
-    const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
+    let url;
+    try {
+      url = parseRequestUrl(req);
+    } catch {
+      jsonError(
+        res,
+        400,
+        'INVALID_REQUEST_TARGET',
+        'request target or Host header is invalid',
+      );
+      return;
+    }
 
     // Health check (always 200, no auth)
     if (req.method === 'GET' && url.pathname === '/healthz') {
@@ -180,7 +193,6 @@ function makeRequestHandler(opts) {
         ok: true,
         server: '@aikdna/kdna-activation-server',
         version: require('../package.json').version,
-        data_dir: store.dataDir,
       });
       return;
     }
@@ -205,13 +217,24 @@ function makeRequestHandler(opts) {
     if (req.method === 'POST' && url.pathname === '/entitlements/activate') {
       await readJson(req, res, async (body) => {
         const { domain, license_key, machine_fingerprint } = body || {};
-        if (!domain) return jsonError(res, 400, 'MISSING_DOMAIN', 'domain is required');
-        if (!license_key) return jsonError(res, 400, 'MISSING_LICENSE_KEY', 'license_key is required');
+        const domainError = requestDomainError(domain);
+        if (domainError) return jsonError(res, 400, domainError.code, domainError.message);
+        if (license_key === undefined || license_key === null || license_key === '') {
+          return jsonError(res, 400, 'MISSING_LICENSE_KEY', 'license_key is required');
+        }
+        if (typeof license_key !== 'string') {
+          return jsonError(
+            res,
+            404,
+            'INVALID_LICENSE_KEY',
+            'no entitlement matches the provided identifiers',
+          );
+        }
 
-        const rec = store.getByKey(license_key);
-        if (!rec || rec.domain !== domain) {
+        const rec = store.getByKey(license_key, domain);
+        if (!rec) {
           return jsonError(res, 404, 'INVALID_LICENSE_KEY',
-            'license_key does not match the requested domain');
+            'no entitlement matches the provided identifiers');
         }
         if (rec.revoked || rec.status === 'revoked') {
           return jsonError(res, 403, 'LICENSE_REVOKED',
@@ -245,8 +268,19 @@ function makeRequestHandler(opts) {
     if (req.method === 'POST' && url.pathname === '/entitlements/sync') {
       await readJson(req, res, async (body) => {
         const { domain, license_key, license_id, machine_fingerprint } = body || {};
-        if (!domain) return jsonError(res, 400, 'MISSING_DOMAIN', 'domain is required');
-        if (!license_key) return jsonError(res, 400, 'MISSING_LICENSE_KEY', 'license_key is required');
+        const domainError = requestDomainError(domain);
+        if (domainError) return jsonError(res, 400, domainError.code, domainError.message);
+        if (license_key === undefined || license_key === null || license_key === '') {
+          return jsonError(res, 400, 'MISSING_LICENSE_KEY', 'license_key is required');
+        }
+        if (typeof license_key !== 'string') {
+          return jsonError(
+            res,
+            404,
+            'INVALID_LICENSE_KEY',
+            'no entitlement matches the provided identifiers',
+          );
+        }
         const rec = resolveRecord({ domain, licenseKey: license_key, licenseId: license_id });
         if (!rec) {
           return jsonError(res, 404, 'INVALID_LICENSE_KEY',
@@ -291,7 +325,7 @@ function makeRequestHandler(opts) {
         domains.length !== 1 ||
         licenseIds.length !== 1 ||
         machineFingerprints.length > 1 ||
-        !STATUS_DOMAIN_RE.test(domains[0]) ||
+        !isCanonicalDomain(domains[0]) ||
         !LICENSE_ID_RE.test(licenseIds[0])
       ) {
         return statusNotFound();
@@ -317,15 +351,20 @@ function makeRequestHandler(opts) {
     // Revoke (admin-only, bearer token)
     if (req.method === 'POST' && url.pathname === '/entitlements/revoke') {
       const auth = req.headers.authorization || '';
-      if (!adminToken || !auth.startsWith('Bearer ') || auth.slice(7) !== adminToken) {
+      if (!validAdminBearer(auth, adminToken)) {
         return jsonError(res, 401, 'UNAUTHORIZED',
           'admin bearer token required');
       }
       await readJson(req, res, async (body) => {
         const { license_id, domain, reason, revoked_by } = body || {};
         if (!license_id) return jsonError(res, 400, 'MISSING_LICENSE_ID', 'license_id is required');
+        const domainError = requestDomainError(domain);
+        if (domainError) return jsonError(res, 400, domainError.code, domainError.message);
+        if (!LICENSE_ID_RE.test(license_id)) {
+          return jsonError(res, 404, 'NOT_FOUND', 'no entitlement matches');
+        }
         const rec = store.get(license_id);
-        if (!rec || (domain && rec.domain !== domain)) {
+        if (!rec || rec.domain !== domain) {
           return jsonError(res, 404, 'NOT_FOUND', 'no entitlement matches');
         }
         const updated = store.revoke(license_id, { reason, revoked_by });
@@ -342,19 +381,20 @@ function makeRequestHandler(opts) {
       return;
     }
 
-    jsonError(res, 404, 'NOT_FOUND', `no handler for ${req.method} ${url.pathname}`);
+    jsonError(res, 404, 'NOT_FOUND', 'no handler for this request');
   }
 
   return handle;
 }
 
 /**
- * Strip internal fields from the API response. The store keeps
- * `updated_at`, `revoked_by`, etc. for bookkeeping; these are
- * not part of the public entitlement record shape.
+ * Strip request secrets and server-only bookkeeping from API responses.
+ * The signed public record keeps the machine fingerprint needed by the
+ * remote-runtime binding contract, but never the stored keyed digest.
  */
 function stripForApi(rec) {
   const out = { ...rec };
+  delete out.license_key;
   delete out.revoked_by;
   delete out.machine_binding_digest;
   delete out.machine_fingerprint;
@@ -362,42 +402,128 @@ function stripForApi(rec) {
 }
 
 function stripForStatus(rec) {
-  const out = stripForApi(rec);
-  delete out.license_key;
-  return out;
+  return stripForApi(rec);
 }
 
 function readJson(req, res, fn) {
-  let body = '';
+  let bodyBytes = 0;
+  let bodyChunks = [];
+  let tooLarge = false;
   req.on('data', (chunk) => {
-    body += chunk;
-    if (body.length > 64 * 1024) {
-      req.destroy();
+    if (tooLarge) return;
+    bodyBytes += chunk.length;
+    if (bodyBytes > MAX_REQUEST_BODY_BYTES) {
+      tooLarge = true;
+      bodyChunks = [];
       jsonError(res, 413, 'REQUEST_TOO_LARGE', 'request body exceeds 64KB');
+      return;
     }
+    bodyChunks.push(Buffer.from(chunk));
   });
   req.on('end', async () => {
+    if (tooLarge) return;
     let parsed;
     try {
+      const body = new TextDecoder('utf-8', { fatal: true })
+        .decode(Buffer.concat(bodyChunks, bodyBytes));
       parsed = body.length === 0 ? {} : JSON.parse(body);
-    } catch (e) {
-      return jsonError(res, 400, 'INVALID_JSON', `not valid JSON: ${e.message}`);
+    } catch {
+      return jsonError(res, 400, 'INVALID_JSON', 'request body is not valid JSON');
+    }
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      return jsonError(res, 400, 'INVALID_REQUEST_BODY', 'request body must be a JSON object');
     }
     try {
       await fn(parsed);
-    } catch (e) {
-      jsonError(res, 500, 'INTERNAL_ERROR', e.message);
+    } catch {
+      if (!res.headersSent && !res.writableEnded) {
+        jsonError(res, 500, 'INTERNAL_ERROR', 'request could not be processed');
+      }
     }
   });
 }
 
 function json(res, status, body) {
+  if (res.writableEnded) return;
   res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8' });
   res.end(JSON.stringify(body, null, 2) + '\n');
 }
 
 function jsonError(res, status, code, message, extra) {
   json(res, status, { ok: false, error: { code, message, retryable: false, ...(extra || {}) } });
+}
+
+function requestDomainError(domain) {
+  if (domain === undefined || domain === null || domain === '') {
+    return { code: 'MISSING_DOMAIN', message: 'domain is required' };
+  }
+  if (!isCanonicalDomain(domain)) {
+    return {
+      code: 'INVALID_DOMAIN',
+      message: 'domain must be a canonical KDNA asset_id',
+    };
+  }
+  return null;
+}
+
+function parseRequestUrl(req) {
+  const hostValues = [];
+  for (let index = 0; index < req.rawHeaders.length; index += 2) {
+    if (String(req.rawHeaders[index]).toLowerCase() === 'host') {
+      hostValues.push(req.rawHeaders[index + 1]);
+    }
+  }
+  if (hostValues.length !== 1) throw new Error('exactly one Host header is required');
+  assertValidHostHeader(hostValues[0]);
+  if (
+    typeof req.url !== 'string' ||
+    !req.url.startsWith('/') ||
+    req.url.startsWith('//') ||
+    req.url.includes('#')
+  ) {
+    throw new Error('request target must use origin-form');
+  }
+  const url = new URL(req.url, REQUEST_BASE_URL);
+  if (url.origin !== REQUEST_BASE_URL || url.hash) {
+    throw new Error('request target must use origin-form');
+  }
+  return url;
+}
+
+function assertValidHostHeader(host) {
+  if (
+    typeof host !== 'string' ||
+    host.length === 0 ||
+    host.endsWith(':') ||
+    /[\u0000-\u0020\u007f\\]/.test(host)
+  ) {
+    throw new Error('Host header is invalid');
+  }
+  const parsed = new URL(`http://${host}`);
+  if (
+    !parsed.hostname ||
+    parsed.username ||
+    parsed.password ||
+    parsed.pathname !== '/' ||
+    parsed.search ||
+    parsed.hash
+  ) {
+    throw new Error('Host header is invalid');
+  }
+}
+
+function validAdminBearer(authorization, adminToken) {
+  const configured = typeof adminToken === 'string' && adminToken.length > 0;
+  const exactScheme = typeof authorization === 'string' && authorization.startsWith('Bearer ');
+  const supplied = exactScheme ? authorization.slice(7) : '';
+  const expected = configured ? adminToken : '';
+  const suppliedBytes = Buffer.from(supplied, 'utf8');
+  const expectedBytes = Buffer.from(expected, 'utf8');
+  const sameLength = suppliedBytes.length === expectedBytes.length;
+  const suppliedDigest = crypto.createHash('sha256').update(suppliedBytes).digest();
+  const expectedDigest = crypto.createHash('sha256').update(expectedBytes).digest();
+  const sameDigest = crypto.timingSafeEqual(suppliedDigest, expectedDigest);
+  return configured && exactScheme && sameLength && sameDigest;
 }
 
 function startServer(opts = {}) {

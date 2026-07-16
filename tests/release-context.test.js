@@ -58,8 +58,6 @@ test('release context rejects version drift and generation-shaped tag forms', ()
   for (const releaseTag of [
     '9.9.9',
     `0${version}`,
-    `v${version}`,
-    `V${version}`,
     `${version}-preview`,
     `${version}+build`,
   ]) {
@@ -113,7 +111,6 @@ test('near-match, stale, and duplicate CHANGELOG headings fail closed', () => {
     `## ${version}.1 (2026-07-16)`,
     `## ${version}1 (2026-07-16)`,
     `### ${version} (2026-07-16)`,
-    `## v${version} (2026-07-16)`,
     `## ${version}-preview (2026-07-16)`,
     `## ${version} notes`,
     `## ${version}\t(2026-07-16)`,

@@ -46,8 +46,8 @@ npm install -g @aikdna/kdna-activation-server
 
 # 2. Create your first license
 kdna-activation-server --create-license '{
-  "domain": "@yourname/your-asset",
-  "license_key": "KDNA-LIC-customer-1",
+  "domain": "kdna:yourname:your-asset",
+  "license_key": "<license-secret>",
   "issued_to": "customer@example.com",
   "ttl_days": 365
 }'
@@ -59,7 +59,7 @@ kdna-activation-server --port 3001 --admin-token "your-secret"
 curl http://localhost:3001/healthz
 curl -X POST http://localhost:3001/entitlements/activate \
   -H 'Content-Type: application/json' \
-  -d '{"domain":"@yourname/your-asset","license_key":"KDNA-LIC-customer-1","machine_fingerprint":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}'
+  -d '{"domain":"kdna:yourname:your-asset","license_key":"<license-secret>","machine_fingerprint":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}'
 ```
 
 That's it. No registration, no phone-home, no KDNA Inc. URL.
@@ -87,8 +87,8 @@ Request body:
 
 ```json
 {
-  "domain": "@yourname/your-asset",
-  "license_key": "KDNA-LIC-customer-1",
+  "domain": "kdna:yourname:your-asset",
+  "license_key": "<license-secret>",
   "machine_fingerprint": "<sha256>"
 }
 ```
@@ -103,7 +103,14 @@ the client. Uppercase, prefixed, whitespace-padded, non-ASCII, short, and long
 forms are rejected rather than normalized into aliases.
 
 Response (200): the signed entitlement record (see
-`specs/kdna-entitlement-api.md` §5).
+`specs/kdna-entitlement-api.md` §5). The response and its signed body never
+contain `license_key`; clients only send that secret in activation and sync
+request bodies.
+
+`domain` is the entitlement contract field for the Core manifest `asset_id`.
+Its value must use the canonical asset identity grammar
+`^[A-Za-z][A-Za-z0-9_-]*(:[A-Za-z0-9_.-]+)+$`. No alternate package-name
+syntax is accepted as a second identity format.
 
 Errors:
 - `INVALID_LICENSE_KEY` (404) — key does not match the domain
@@ -134,7 +141,7 @@ Request body:
 ```json
 {
   "license_id": "lic_abc123",
-  "domain": "@yourname/your-asset",
+  "domain": "kdna:yourname:your-asset",
   "reason": "payment_failed",
   "revoked_by": "billing-system"
 }
@@ -160,7 +167,7 @@ return the same `NOT_FOUND` response as an unknown record, so public
 
 ```bash
 # Create a license (one-shot)
-kdna-activation-server --create-license '{"domain":"@x/y","license_key":"KDNA-LIC-1"}'
+kdna-activation-server --create-license '{"domain":"kdna:creator:asset","license_key":"<license-secret>"}'
 
 # List all licenses
 kdna-activation-server --list
@@ -186,9 +193,10 @@ mode 0600.
   leaves the deployer's machine.
 - **The admin token is deployer-controlled.** Set it at
   startup or omit it to disable `/revoke` over HTTP.
-- **The license_key is the secret.** The server echoes it
-  back in the activation record (per spec). Clients MUST
-  NOT log or persist it beyond the local activation file.
+- **The license_key is a request secret.** It is accepted only in activation
+  and sync JSON request bodies. The server does not return it in signed
+  records, status responses, errors, or command output. Clients should not
+  place it in URLs or logs.
 - **Records are signed.** Every `/activate` and `/sync`
   response is signed with the server's Ed25519 key. Clients
   can verify against `/server/identity`.
@@ -201,6 +209,13 @@ mode 0600.
   write, while a different identifier that shared an older sanitized filename
   is never treated as an alias. Directory scans only discover identifiers;
   activation, listing, and key lookup always re-read the authoritative path.
+- **HTTP routing is origin-form only.** Requests require one syntactically
+  valid `Host` header, while route selection uses a fixed internal base rather
+  than the supplied host. Absolute request targets and Host values containing
+  credentials, paths, queries, or fragments are rejected.
+- **JSON bodies are byte-bounded and strictly decoded.** Activation, sync, and
+  revocation accept at most 64 KiB of UTF-8 bytes. Oversized, malformed UTF-8,
+  and malformed JSON inputs receive stable errors without parser details.
 
 ---
 
