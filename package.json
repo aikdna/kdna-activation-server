@@ -17,13 +17,17 @@
   ],
   "scripts": {
     "start": "node bin/kdna-activation-server.js",
-    "test": "node --test tests/*.test.js",
+    "check:public-surface": "node scripts/check-public-surface.js",
+    "check:protocol-names": "node scripts/check-protocol-names.js",
+    "test": "node scripts/check-public-surface.js && node scripts/check-protocol-names.js && node --test tests/*.test.js",
     "prepublishOnly": "npm test"
   },
   "engines": {
     "node": ">=18"
   },
-  "dependencies": {},
+  "dependencies": {
+    "@aikdna/kdna-core": "0.20.0"
+  },
   "license": "Apache-2.0",
   "repository": {
     "type": "git",

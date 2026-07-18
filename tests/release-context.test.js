@@ -7,10 +7,13 @@ const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 const {
   verifyReleaseContext,
+  verifyReleaseEvent,
+  verifyRuntimeDependency,
 } = require('../scripts/verify-release-context.cjs');
 
 const ROOT = path.resolve(__dirname, '..');
 const PACKAGE_JSON = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
+const PACKAGE_LOCK = JSON.parse(fs.readFileSync(path.join(ROOT, 'package-lock.json'), 'utf8'));
 const WORKFLOW = fs.readFileSync(path.join(ROOT, '.github/workflows/publish.yml'), 'utf8');
 const SCRIPT = path.join(ROOT, 'scripts/verify-release-context.cjs');
 
@@ -49,7 +52,13 @@ test('release context accepts the exact natural SemVer tag and literal top CHANG
   const result = spawnSync(process.execPath, [SCRIPT], {
     cwd: ROOT,
     encoding: 'utf8',
-    env: { ...process.env, RELEASE_TAG: version },
+    env: {
+      ...process.env,
+      RELEASE_EVENT_ACTION: 'published',
+      RELEASE_IS_DRAFT: 'false',
+      RELEASE_IS_PRERELEASE: 'false',
+      RELEASE_TAG: version,
+    },
   });
   assert.equal(result.status, 0, result.stderr);
 });
@@ -89,6 +98,28 @@ test('release context rejects version drift and generation-shaped tag forms', ()
   }
 });
 
+test('release event and exact Core dependency fail closed', () => {
+  assert.deepEqual(
+    verifyReleaseEvent({ action: 'published', isDraft: 'false', isPrerelease: 'false' }),
+    { action: 'published', isDraft: 'false', isPrerelease: 'false' },
+  );
+  for (const event of [
+    { action: 'created', isDraft: 'false', isPrerelease: 'false' },
+    { action: 'published', isDraft: 'true', isPrerelease: 'false' },
+    { action: 'published', isDraft: 'false', isPrerelease: 'true' },
+  ]) {
+    assert.throws(() => verifyReleaseEvent(event), /release|draft|prerelease/);
+  }
+  assert.doesNotThrow(() => verifyRuntimeDependency(PACKAGE_JSON, PACKAGE_LOCK));
+  assert.throws(
+    () => verifyRuntimeDependency(
+      { ...PACKAGE_JSON, dependencies: { '@aikdna/kdna-core': '^0.20.0' } },
+      PACKAGE_LOCK,
+    ),
+    /exact @aikdna\/kdna-core/,
+  );
+});
+
 test('a command-injection-shaped legal Git tag is data, never shell source', () => {
   const version = PACKAGE_JSON.version;
   const maliciousTag = `${version}';printf\${IFS}TAG_INTERPOLATION_EXECUTED;#`;
@@ -98,7 +129,13 @@ test('a command-injection-shaped legal Git tag is data, never shell source', () 
   const result = spawnSync(process.execPath, [SCRIPT], {
     cwd: ROOT,
     encoding: 'utf8',
-    env: { ...process.env, RELEASE_TAG: maliciousTag },
+    env: {
+      ...process.env,
+      RELEASE_EVENT_ACTION: 'published',
+      RELEASE_IS_DRAFT: 'false',
+      RELEASE_IS_PRERELEASE: 'false',
+      RELEASE_TAG: maliciousTag,
+    },
   });
   assert.notEqual(result.status, 0);
   assert.doesNotMatch(`${result.stdout}${result.stderr}`, /TAG_INTERPOLATION_EXECUTED/);
@@ -224,11 +261,18 @@ test('publish workflow is release-only and passes the tag only through env', () 
   assert.match(WORKFLOW, /release:\s*\n\s+types: \[published\]/);
   assert.doesNotMatch(WORKFLOW, /workflow_dispatch/);
   assert.match(WORKFLOW, /run: node scripts\/verify-release-context\.cjs/);
+  assert.match(WORKFLOW, /actions\/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0/);
+  assert.match(WORKFLOW, /actions\/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38/);
+  assert.doesNotMatch(WORKFLOW, /actions\/(?:checkout|setup-node)@v\d+/);
+  assert.match(WORKFLOW, /RELEASE_EVENT_ACTION: \$\{\{ github\.event\.action \}\}/);
+  assert.match(WORKFLOW, /RELEASE_IS_DRAFT: \$\{\{ github\.event\.release\.draft \}\}/);
+  assert.match(WORKFLOW, /RELEASE_IS_PRERELEASE: \$\{\{ github\.event\.release\.prerelease \}\}/);
 
   const expression = '$' + '{{ github.event.release.tag_name }}';
   const expressionLines = WORKFLOW
     .split(/\r?\n/)
     .filter((line) => line.includes(expression))
     .map((line) => line.trim());
-  assert.deepEqual(expressionLines, [`RELEASE_TAG: ${expression}`]);
+  assert.equal(expressionLines.includes(`RELEASE_TAG: ${expression}`), true);
+  assert.equal(expressionLines.includes(`ref: ${expression}`), true);
 });

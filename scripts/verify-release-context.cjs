@@ -68,11 +68,40 @@ function verifyReleaseContext({ packageJson, changelog, releaseTag }) {
   return { version, releaseTag, changelogHeading: headings[0] };
 }
 
+function verifyReleaseEvent({ action, isDraft, isPrerelease }) {
+  assert(action === 'published', 'release event action must be exactly published');
+  assert(isDraft === 'false', 'draft releases cannot publish packages');
+  assert(isPrerelease === 'false', 'prereleases cannot publish stable packages');
+  return { action, isDraft, isPrerelease };
+}
+
+function verifyRuntimeDependency(packageJson, packageLock) {
+  assert(
+    packageJson?.dependencies?.['@aikdna/kdna-core'] === '0.20.0',
+    'Activation must bind exact @aikdna/kdna-core@0.20.0',
+  );
+  assert(
+    packageLock?.packages?.['']?.dependencies?.['@aikdna/kdna-core'] === '0.20.0',
+    'package lock must bind exact @aikdna/kdna-core@0.20.0',
+  );
+  assert(
+    packageLock?.packages?.['node_modules/@aikdna/kdna-core']?.version === '0.20.0',
+    'installed lock entry must resolve @aikdna/kdna-core@0.20.0',
+  );
+}
+
 function main() {
   const root = path.resolve(__dirname, '..');
   const packageJson = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
+  const packageLock = JSON.parse(fs.readFileSync(path.join(root, 'package-lock.json'), 'utf8'));
   const changelog = fs.readFileSync(path.join(root, 'CHANGELOG.md'), 'utf8');
   try {
+    verifyReleaseEvent({
+      action: process.env.RELEASE_EVENT_ACTION,
+      isDraft: process.env.RELEASE_IS_DRAFT,
+      isPrerelease: process.env.RELEASE_IS_PRERELEASE,
+    });
+    verifyRuntimeDependency(packageJson, packageLock);
     const context = verifyReleaseContext({
       packageJson,
       changelog,
@@ -92,4 +121,6 @@ if (require.main === module) main();
 module.exports = {
   isExactReleaseHeading,
   verifyReleaseContext,
+  verifyReleaseEvent,
+  verifyRuntimeDependency,
 };

@@ -38,12 +38,45 @@ const net = require('node:net');
 const { spawnSync } = require('node:child_process');
 const crypto = require('node:crypto');
 
-const { startServer, stopServer, makeStore, ensureKeyPair, verifyEntitlementSignature, publicKeyFingerprint } = require('../src/index');
+const {
+  ASSET_ID_RE,
+  CORE_CONFORMANCE_VERSION,
+  ENTITLEMENT_ROUTES,
+  ensureKeyPair,
+  isCanonicalAssetId,
+  makeStore,
+  publicKeyFingerprint,
+  startServer,
+  stopServer,
+  verifyEntitlementSignature,
+} = require('../src/index');
+const corePackage = require('@aikdna/kdna-core/package.json');
+const coreManifestSchema = require('@aikdna/kdna-core/schema/manifest.schema.json');
 
 const CLI = path.resolve(__dirname, '..', 'bin', 'kdna-activation-server.js');
 const MACHINE_A = 'a'.repeat(64);
 const MACHINE_B = 'b'.repeat(64);
 const MAX_REQUEST_BODY_BYTES = 64 * 1024;
+
+test('public entitlement contract is bound to the Core 0.20 manifest asset identity', () => {
+  assert.equal(CORE_CONFORMANCE_VERSION, '0.20.0');
+  assert.equal(corePackage.version, CORE_CONFORMANCE_VERSION);
+  assert.equal(ASSET_ID_RE.source, coreManifestSchema.properties.asset_id.pattern);
+  assert.equal(
+    isCanonicalAssetId('kdna:conformance:asset'),
+    new RegExp(coreManifestSchema.properties.asset_id.pattern, 'u')
+      .test('kdna:conformance:asset'),
+  );
+  assert.deepEqual(ENTITLEMENT_ROUTES, {
+    health: '/healthz',
+    identity: '/server/identity',
+    activate: '/entitlements/activate',
+    sync: '/entitlements/sync',
+    status: '/entitlements/status',
+    revoke: '/entitlements/revoke',
+  });
+  assert.equal(Object.isFrozen(ENTITLEMENT_ROUTES), true);
+});
 
 function makeDataDir() {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'kdna-s24-'));
@@ -116,10 +149,10 @@ test('Story 24: /server/identity returns the server public key', async () => {
 
 test('Story 24: /entitlements/activate returns a signed record for valid key', async () => {
   await withServer({}, async (ctx, dataDir, store) => {
-    store.create({ domain: 'kdna:x:y', license_key: 'KDNA-LIC-test' });
+    store.create({ domain: 'kdna:x:y', license_key: 'synthetic-license-secret-test' });
     const res = await httpJson(ctx, 'POST', '/entitlements/activate', {
       domain: 'kdna:x:y',
-      license_key: 'KDNA-LIC-test',
+      license_key: 'synthetic-license-secret-test',
       machine_fingerprint: MACHINE_A,
     });
     assert.equal(res.status, 200);
@@ -127,7 +160,7 @@ test('Story 24: /entitlements/activate returns a signed record for valid key', a
     assert.equal(body.status, 'active');
     assert.equal(body.domain, 'kdna:x:y');
     assert.equal(body.license_key, undefined);
-    assert.doesNotMatch(JSON.stringify(body), /KDNA-LIC-test/);
+    assert.doesNotMatch(JSON.stringify(body), /synthetic-license-secret-test/);
     assert.equal(body.machine_fingerprint, MACHINE_A);
     assert.match(body.signature_base64, /^[A-Za-z0-9+/=]+$/);
   });
@@ -137,7 +170,7 @@ test('Story 24: /activate rejects an unknown license_key with INVALID_LICENSE_KE
   await withServer({}, async (ctx) => {
     const res = await httpJson(ctx, 'POST', '/entitlements/activate', {
       domain: 'kdna:x:y',
-      license_key: 'KDNA-LIC-DOES-NOT-EXIST',
+      license_key: 'synthetic-license-secret-DOES-NOT-EXIST',
     });
     assert.equal(res.status, 404);
     const body = await res.json();
@@ -147,10 +180,10 @@ test('Story 24: /activate rejects an unknown license_key with INVALID_LICENSE_KE
 
 test('Story 24: /activate rejects a license_key that does not match the domain', async () => {
   await withServer({}, async (ctx, dataDir, store) => {
-    const rec = store.create({ domain: 'kdna:x:y', license_key: 'KDNA-LIC-test' });
+    const rec = store.create({ domain: 'kdna:x:y', license_key: 'synthetic-license-secret-test' });
     const res = await httpJson(ctx, 'POST', '/entitlements/activate', {
       domain: 'kdna:x:different-domain',
-      license_key: 'KDNA-LIC-test',
+      license_key: 'synthetic-license-secret-test',
       machine_fingerprint: MACHINE_A,
     });
     assert.equal(res.status, 404);
@@ -162,16 +195,16 @@ test('Story 24: /activate rejects a license_key that does not match the domain',
 
 test('Story 24: /sync refreshes last_checked_at and returns a signed record', async () => {
   await withServer({}, async (ctx, dataDir, store) => {
-    store.create({ domain: 'kdna:x:y', license_key: 'KDNA-LIC-test' });
+    store.create({ domain: 'kdna:x:y', license_key: 'synthetic-license-secret-test' });
     const activate = await httpJson(ctx, 'POST', '/entitlements/activate', {
       domain: 'kdna:x:y',
-      license_key: 'KDNA-LIC-test',
+      license_key: 'synthetic-license-secret-test',
       machine_fingerprint: MACHINE_A,
     });
     assert.equal(activate.status, 200);
     const res = await httpJson(ctx, 'POST', '/entitlements/sync', {
       domain: 'kdna:x:y',
-      license_key: 'KDNA-LIC-test',
+      license_key: 'synthetic-license-secret-test',
       machine_fingerprint: MACHINE_A,
     });
     assert.equal(res.status, 200);
@@ -186,7 +219,7 @@ test('Story 24: /activate and /sync reject expired licenses', async () => {
   await withServer({}, async (ctx, dataDir, store) => {
     const expired = store.create({
       domain: 'kdna:x:y',
-      license_key: 'KDNA-LIC-expired',
+      license_key: 'synthetic-license-secret-expired',
       issued_at: '2026-01-01T00:00:00.000Z',
     });
     store.put({
@@ -196,7 +229,7 @@ test('Story 24: /activate and /sync reject expired licenses', async () => {
 
     const activate = await httpJson(ctx, 'POST', '/entitlements/activate', {
       domain: 'kdna:x:y',
-      license_key: 'KDNA-LIC-expired',
+      license_key: 'synthetic-license-secret-expired',
     });
     assert.equal(activate.status, 403);
     const activateBody = await activate.json();
@@ -204,7 +237,7 @@ test('Story 24: /activate and /sync reject expired licenses', async () => {
 
     const sync = await httpJson(ctx, 'POST', '/entitlements/sync', {
       domain: 'kdna:x:y',
-      license_key: 'KDNA-LIC-expired',
+      license_key: 'synthetic-license-secret-expired',
     });
     assert.equal(sync.status, 403);
     const syncBody = await sync.json();
@@ -214,7 +247,7 @@ test('Story 24: /activate and /sync reject expired licenses', async () => {
 
 test('Story 24: /revoke without admin token returns 401 UNAUTHORIZED', async () => {
   await withServer({ adminToken: 'secret-admin-token' }, async (ctx, dataDir, store) => {
-    store.create({ domain: 'kdna:x:y', license_key: 'KDNA-LIC-test' });
+    store.create({ domain: 'kdna:x:y', license_key: 'synthetic-license-secret-test' });
     const res = await httpJson(ctx, 'POST', '/entitlements/revoke', {
       license_id: '...', domain: 'kdna:x:y', reason: 'test',
     });
@@ -224,7 +257,7 @@ test('Story 24: /revoke without admin token returns 401 UNAUTHORIZED', async () 
 
 test('Story 24: /revoke with admin token marks license as revoked; activate returns 403', async () => {
   await withServer({ adminToken: 'secret-admin-token' }, async (ctx, dataDir, store) => {
-    const rec = store.create({ domain: 'kdna:x:y', license_key: 'KDNA-LIC-test' });
+    const rec = store.create({ domain: 'kdna:x:y', license_key: 'synthetic-license-secret-test' });
     // Revoke
     const rev = await httpJson(ctx, 'POST', '/entitlements/revoke', {
       license_id: rec.license_id, domain: 'kdna:x:y', reason: 'payment_failed',
@@ -235,7 +268,7 @@ test('Story 24: /revoke with admin token marks license as revoked; activate retu
     assert.equal(revBody.status, 'revoked');
     // Activate should now fail with LICENSE_REVOKED
     const act = await httpJson(ctx, 'POST', '/entitlements/activate', {
-      domain: 'kdna:x:y', license_key: 'KDNA-LIC-test',
+      domain: 'kdna:x:y', license_key: 'synthetic-license-secret-test',
     });
     assert.equal(act.status, 403);
     const actBody = await act.json();
@@ -245,10 +278,10 @@ test('Story 24: /revoke with admin token marks license as revoked; activate retu
 
 test('Story 24: /entitlements/status returns public metadata without license_key', async () => {
   await withServer({}, async (ctx, dataDir, store) => {
-    const rec = store.create({ domain: 'kdna:x:y', license_key: 'KDNA-LIC-test' });
+    const rec = store.create({ domain: 'kdna:x:y', license_key: 'synthetic-license-secret-test' });
     const activate = await httpJson(ctx, 'POST', '/entitlements/activate', {
       domain: 'kdna:x:y',
-      license_key: 'KDNA-LIC-test',
+      license_key: 'synthetic-license-secret-test',
       machine_fingerprint: MACHINE_A,
     });
     assert.equal(activate.status, 200);
@@ -271,10 +304,10 @@ test('Story 24: /entitlements/status returns public metadata without license_key
 
 test('machine-bound activation requires one canonical SHA-256 fingerprint', async () => {
   await withServer({}, async (ctx, dataDir, store) => {
-    const rec = store.create({ domain: 'kdna:x:y', license_key: 'KDNA-LIC-bound' });
+    const rec = store.create({ domain: 'kdna:x:y', license_key: 'synthetic-license-secret-bound' });
 
     const missing = await httpJson(ctx, 'POST', '/entitlements/activate', {
-      domain: 'kdna:x:y', license_key: 'KDNA-LIC-bound',
+      domain: 'kdna:x:y', license_key: 'synthetic-license-secret-bound',
     });
     assert.equal(missing.status, 400);
     assert.equal((await missing.json()).error.code, 'MISSING_MACHINE_FINGERPRINT');
@@ -291,7 +324,7 @@ test('machine-bound activation requires one canonical SHA-256 fingerprint', asyn
       {},
     ]) {
       const malformed = await httpJson(ctx, 'POST', '/entitlements/activate', {
-        domain: 'kdna:x:y', license_key: 'KDNA-LIC-bound', machine_fingerprint,
+        domain: 'kdna:x:y', license_key: 'synthetic-license-secret-bound', machine_fingerprint,
       });
       assert.equal(malformed.status, 400, JSON.stringify(machine_fingerprint));
       const body = await malformed.json();
@@ -313,12 +346,12 @@ test('machine-bound activation requires one canonical SHA-256 fingerprint', asyn
 
 test('first activation stores only a keyed binding digest and is idempotent for that machine', async () => {
   await withServer({}, async (ctx, dataDir, store, keys) => {
-    const rec = store.create({ domain: 'kdna:x:y', license_key: 'KDNA-LIC-private' });
+    const rec = store.create({ domain: 'kdna:x:y', license_key: 'synthetic-license-secret-private' });
 
     for (let attempt = 0; attempt < 2; attempt++) {
       const activate = await httpJson(ctx, 'POST', '/entitlements/activate', {
         domain: 'kdna:x:y',
-        license_key: 'KDNA-LIC-private',
+        license_key: 'synthetic-license-secret-private',
         machine_fingerprint: MACHINE_A,
       });
       assert.equal(activate.status, 200);
@@ -343,7 +376,7 @@ test('first activation stores only a keyed binding digest and is idempotent for 
 
     const wrongMachine = await httpJson(ctx, 'POST', '/entitlements/activate', {
       domain: 'kdna:x:y',
-      license_key: 'KDNA-LIC-private',
+      license_key: 'synthetic-license-secret-private',
       machine_fingerprint: MACHINE_B,
     });
     assert.equal(wrongMachine.status, 403);
@@ -357,9 +390,9 @@ test('first activation stores only a keyed binding digest and is idempotent for 
 
 test('simultaneous first activations bind exactly one machine and preserve the winner', async () => {
   await withServer({}, async (ctx, dataDir, store) => {
-    const rec = store.create({ domain: 'kdna:x:race', license_key: 'KDNA-LIC-race' });
+    const rec = store.create({ domain: 'kdna:x:race', license_key: 'synthetic-license-secret-race' });
     const request = (machine_fingerprint) => httpJson(ctx, 'POST', '/entitlements/activate', {
-      domain: 'kdna:x:race', license_key: 'KDNA-LIC-race', machine_fingerprint,
+      domain: 'kdna:x:race', license_key: 'synthetic-license-secret-race', machine_fingerprint,
     });
 
     const responses = await Promise.all([request(MACHINE_A), request(MACHINE_B)]);
@@ -381,10 +414,10 @@ test('simultaneous first activations bind exactly one machine and preserve the w
 test('sync requires matching domain, secret key, optional id, and bound machine', async () => {
   await withServer({}, async (ctx, dataDir, store) => {
     const first = store.create({
-      domain: 'kdna:x:first', license_key: 'KDNA-LIC-first', license_id: 'lic_first',
+      domain: 'kdna:x:first', license_key: 'synthetic-license-secret-first', license_id: 'lic_first',
     });
     const second = store.create({
-      domain: 'kdna:x:second', license_key: 'KDNA-LIC-second', license_id: 'lic_second',
+      domain: 'kdna:x:second', license_key: 'synthetic-license-secret-second', license_id: 'lic_second',
       require_machine_binding: false,
     });
     const activate = await httpJson(ctx, 'POST', '/entitlements/activate', {
@@ -414,7 +447,7 @@ test('sync requires matching domain, secret key, optional id, and bound machine'
 
 test('status fails closed for a missing or wrong bound machine without exposing the record', async () => {
   await withServer({}, async (ctx, dataDir, store) => {
-    const rec = store.create({ domain: 'kdna:x:y', license_key: 'KDNA-LIC-status' });
+    const rec = store.create({ domain: 'kdna:x:y', license_key: 'synthetic-license-secret-status' });
 
     const beforeActivation = new URLSearchParams({
       domain: rec.domain, license_id: rec.license_id, machine_fingerprint: MACHINE_A,
@@ -473,7 +506,7 @@ test('unbound licenses keep no-binding activation, sync, and status semantics', 
   await withServer({}, async (ctx, dataDir, store) => {
     const rec = store.create({
       domain: 'kdna:x:unbound',
-      license_key: 'KDNA-LIC-unbound',
+      license_key: 'synthetic-license-secret-unbound',
       require_machine_binding: false,
     });
     const activate = await httpJson(ctx, 'POST', '/entitlements/activate', {
@@ -502,7 +535,7 @@ test('unbound licenses keep no-binding activation, sync, and status semantics', 
 
 test('a legacy raw binding migrates only after an exact machine match', async () => {
   await withServer({}, async (ctx, dataDir, store) => {
-    const rec = store.create({ domain: 'kdna:x:legacy', license_key: 'KDNA-LIC-legacy' });
+    const rec = store.create({ domain: 'kdna:x:legacy', license_key: 'synthetic-license-secret-legacy' });
     for (const file of recordJsonFiles(dataDir)) fs.rmSync(file);
     const legacyPath = path.join(
       dataDir,
@@ -536,20 +569,20 @@ test('license identifiers have collision-free storage and exact lookup semantics
   await withServer({}, async (ctx, dataDir, store) => {
     const colon = store.create({
       domain: 'kdna:x:colon',
-      license_key: 'KDNA-LIC-colon',
+      license_key: 'synthetic-license-secret-colon',
       license_id: 'lic:alias',
     });
     const legacyCollisionPath = path.join(dataDir, 'lic_alias.json');
     fs.renameSync(recordJsonFiles(dataDir)[0], legacyCollisionPath);
     const dot = store.create({
       domain: 'kdna:x:dot',
-      license_key: 'KDNA-LIC-dot',
+      license_key: 'synthetic-license-secret-dot',
       license_id: 'lic.alias',
       require_machine_binding: false,
     });
     const upper = store.create({
       domain: 'kdna:x:upper',
-      license_key: 'KDNA-LIC-upper',
+      license_key: 'synthetic-license-secret-upper',
       license_id: 'LIC:ALIAS',
       require_machine_binding: false,
     });
@@ -602,19 +635,19 @@ test('canonical records are authoritative and never fall back after corruption',
     const store = makeStore(dataDir);
     const rec = store.create({
       domain: 'kdna:x:canonical',
-      license_key: 'KDNA-LIC-canonical',
+      license_key: 'synthetic-license-secret-canonical',
       license_id: 'lic_canonical',
     });
     const canonicalPath = recordJsonFiles(dataDir)[0];
     const legacyPath = path.join(dataDir, `${rec.license_id}.json`);
     fs.writeFileSync(
       legacyPath,
-      JSON.stringify({ ...rec, license_key: 'KDNA-LIC-stale' }, null, 2) + '\n',
+      JSON.stringify({ ...rec, license_key: 'synthetic-license-secret-stale' }, null, 2) + '\n',
       { mode: 0o600 },
     );
 
     assert.equal(store.get(rec.license_id).license_key, rec.license_key);
-    assert.equal(store.getByKey('KDNA-LIC-stale', rec.domain), null);
+    assert.equal(store.getByKey('synthetic-license-secret-stale', rec.domain), null);
     assert.equal(store.list().length, 1);
     assert.equal(store.list()[0].license_key, rec.license_key);
 
@@ -638,7 +671,7 @@ test('misplaced JSON is never an entitlement authority, including for unbound li
   await withServer({}, async (ctx, dataDir, store) => {
     const rec = store.create({
       domain: 'kdna:x:misplaced',
-      license_key: 'KDNA-LIC-misplaced',
+      license_key: 'synthetic-license-secret-misplaced',
       license_id: 'lic_misplaced',
       require_machine_binding: false,
     });
@@ -674,7 +707,7 @@ test('malformed canonical state cannot downgrade to an exact legacy record', asy
   await withServer({}, async (ctx, dataDir, store) => {
     const rec = store.create({
       domain: 'kdna:x:no-downgrade',
-      license_key: 'KDNA-LIC-no-downgrade',
+      license_key: 'synthetic-license-secret-no-downgrade',
       license_id: 'lic_no_downgrade',
       require_machine_binding: false,
     });
@@ -705,7 +738,7 @@ test('malformed canonical state cannot downgrade to an exact legacy record', asy
 
 test('a malformed legacy raw binding cannot be claimed by a new machine', async () => {
   await withServer({}, async (ctx, dataDir, store) => {
-    const rec = store.create({ domain: 'kdna:x:legacy', license_key: 'KDNA-LIC-bad-legacy' });
+    const rec = store.create({ domain: 'kdna:x:legacy', license_key: 'synthetic-license-secret-bad-legacy' });
     store.put({ ...rec, machine_fingerprint: 'legacy-device-name' });
     const response = await httpJson(ctx, 'POST', '/entitlements/activate', {
       domain: rec.domain, license_key: rec.license_key, machine_fingerprint: MACHINE_A,
@@ -718,7 +751,7 @@ test('a malformed legacy raw binding cannot be claimed by a new machine', async 
 
 test('a legacy record with no binding flag inherits the fail-closed default', async () => {
   await withServer({}, async (ctx, dataDir, store) => {
-    const rec = store.create({ domain: 'kdna:x:default', license_key: 'KDNA-LIC-default' });
+    const rec = store.create({ domain: 'kdna:x:default', license_key: 'synthetic-license-secret-default' });
     const legacy = { ...rec };
     delete legacy.require_machine_binding;
     store.put(legacy);
@@ -748,7 +781,7 @@ test('the keyed machine binding survives a clean server restart', async () => {
     first = await startServer({ dataDir, port: 0 });
     const rec = first.store.create({
       domain: 'kdna:x:restart',
-      license_key: 'KDNA-LIC-restart',
+      license_key: 'synthetic-license-secret-restart',
     });
     const activate = await httpJson(first, 'POST', '/entitlements/activate', {
       domain: rec.domain,
@@ -784,9 +817,9 @@ test('the keyed machine binding survives a clean server restart', async () => {
 
 test('Story 24: signed records verify against the server public key (Ed25519 round-trip)', async () => {
   await withServer({}, async (ctx, dataDir, store, keys) => {
-    store.create({ domain: 'kdna:x:y', license_key: 'KDNA-LIC-test' });
+    store.create({ domain: 'kdna:x:y', license_key: 'synthetic-license-secret-test' });
     const res = await httpJson(ctx, 'POST', '/entitlements/activate', {
-      domain: 'kdna:x:y', license_key: 'KDNA-LIC-test', machine_fingerprint: MACHINE_A,
+      domain: 'kdna:x:y', license_key: 'synthetic-license-secret-test', machine_fingerprint: MACHINE_A,
     });
     const body = await res.json();
     const verify = verifyEntitlementSignature(body, keys.publicPem);
@@ -987,8 +1020,8 @@ test('license secrets stay request-only across signed records, errors, routes, a
 
   const readme = fs.readFileSync(path.resolve(__dirname, '..', 'README.md'), 'utf8');
   const cli = fs.readFileSync(CLI, 'utf8');
-  assert.doesNotMatch(readme, /KDNA-LIC-|echoes it\s+back/);
-  assert.doesNotMatch(cli, /KDNA-LIC-/);
+  assert.doesNotMatch(readme, /synthetic-license-secret-|echoes it\s+back/);
+  assert.doesNotMatch(cli, /synthetic-license-secret-/);
 });
 
 test('admin bearer comparison is exact and record absence is not exposed by revoke errors', async () => {
@@ -1191,17 +1224,17 @@ test('Story 24: CLI --create-license creates a record, --list lists it, --revoke
   try {
     const create = spawnSync(process.execPath, [CLI,
       '--create-license',
-      '{"domain":"kdna:cli:test","license_key":"KDNA-LIC-cli","issued_to":"cli@example.com","ttl_days":30}',
+      '{"domain":"kdna:cli:test","license_key":"synthetic-license-secret-cli","issued_to":"cli@example.com","ttl_days":30}',
       '--data-dir', dataDir,
     ], { encoding: 'utf8' });
     assert.equal(create.status, 0, `create failed: ${create.stderr}`);
     assert.match(create.stdout, /Created license:/);
-    assert.doesNotMatch(create.stdout, /KDNA-LIC-cli|license_key/);
+    assert.doesNotMatch(create.stdout, /synthetic-license-secret-cli|license_key/);
 
     const list = spawnSync(process.execPath, [CLI, '--list', '--data-dir', dataDir], { encoding: 'utf8' });
     assert.equal(list.status, 0);
     assert.match(list.stdout, /kdna:cli:test/);
-    assert.doesNotMatch(list.stdout, /KDNA-LIC-cli|license_key/);
+    assert.doesNotMatch(list.stdout, /synthetic-license-secret-cli|license_key/);
 
     // Find the license_id from the create output
     const created = JSON.parse(create.stdout.split('Created license:\n  ')[1]);
@@ -1213,7 +1246,7 @@ test('Story 24: CLI --create-license creates a record, --list lists it, --revoke
     assert.equal(revoke.status, 0, `revoke failed: ${revoke.stderr}`);
     assert.match(revoke.stdout, /Revoked:/);
     assert.match(revoke.stdout, /CLI test/);
-    assert.doesNotMatch(revoke.stdout, /KDNA-LIC-cli|license_key/);
+    assert.doesNotMatch(revoke.stdout, /synthetic-license-secret-cli|license_key/);
   } finally {
     fs.rmSync(dataDir, { recursive: true, force: true });
   }

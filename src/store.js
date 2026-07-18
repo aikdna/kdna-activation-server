@@ -28,9 +28,10 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
+const { ASSET_ID_RE, isCanonicalAssetId } = require('./contract');
 
 const MACHINE_BINDING_DIGEST_RE = /^[0-9a-f]{64}$/;
-const CANONICAL_DOMAIN_RE = /^[A-Za-z][A-Za-z0-9_-]*(:[A-Za-z0-9_.-]+)+$/;
+const CANONICAL_DOMAIN_RE = ASSET_ID_RE;
 
 const DEFAULT_DATA_DIR = path.join(
   process.env.HOME || process.env.USERPROFILE || '.',
@@ -302,7 +303,7 @@ function validateLicenseId(licenseId) {
 }
 
 function isCanonicalDomain(domain) {
-  return typeof domain === 'string' && CANONICAL_DOMAIN_RE.test(domain);
+  return isCanonicalAssetId(domain);
 }
 
 function validateDomain(domain) {

@@ -41,6 +41,7 @@
 const http = require('node:http');
 const { URL } = require('node:url');
 const crypto = require('node:crypto');
+const { ENTITLEMENT_ROUTES } = require('./contract');
 const { isCanonicalDomain, makeStore } = require('./store');
 const {
   ensureKeyPair,
@@ -188,7 +189,7 @@ function makeRequestHandler(opts) {
     }
 
     // Health check (always 200, no auth)
-    if (req.method === 'GET' && url.pathname === '/healthz') {
+    if (req.method === 'GET' && url.pathname === ENTITLEMENT_ROUTES.health) {
       json(res, 200, {
         ok: true,
         server: '@aikdna/kdna-activation-server',
@@ -199,7 +200,7 @@ function makeRequestHandler(opts) {
 
     // Server identity — the public key clients use to verify
     // signed entitlement records. No auth (this is a public key).
-    if (req.method === 'GET' && url.pathname === '/server/identity') {
+    if (req.method === 'GET' && url.pathname === ENTITLEMENT_ROUTES.identity) {
       const rawHex = publicKeyRawHex(keys.publicPem);
       json(res, 200, {
         server: '@aikdna/kdna-activation-server',
@@ -214,7 +215,7 @@ function makeRequestHandler(opts) {
     }
 
     // Activation
-    if (req.method === 'POST' && url.pathname === '/entitlements/activate') {
+    if (req.method === 'POST' && url.pathname === ENTITLEMENT_ROUTES.activate) {
       await readJson(req, res, async (body) => {
         const { domain, license_key, machine_fingerprint } = body || {};
         const domainError = requestDomainError(domain);
@@ -265,7 +266,7 @@ function makeRequestHandler(opts) {
     }
 
     // Sync
-    if (req.method === 'POST' && url.pathname === '/entitlements/sync') {
+    if (req.method === 'POST' && url.pathname === ENTITLEMENT_ROUTES.sync) {
       await readJson(req, res, async (body) => {
         const { domain, license_key, license_id, machine_fingerprint } = body || {};
         const domainError = requestDomainError(domain);
@@ -312,7 +313,7 @@ function makeRequestHandler(opts) {
     }
 
     // Status (introspection; lightweight)
-    if (req.method === 'GET' && url.pathname === '/entitlements/status') {
+    if (req.method === 'GET' && url.pathname === ENTITLEMENT_ROUTES.status) {
       const statusNotFound = () => jsonError(res, 404, 'NOT_FOUND', 'no entitlement matches');
       const domains = url.searchParams.getAll('domain');
       const licenseIds = url.searchParams.getAll('license_id');
@@ -349,7 +350,7 @@ function makeRequestHandler(opts) {
     }
 
     // Revoke (admin-only, bearer token)
-    if (req.method === 'POST' && url.pathname === '/entitlements/revoke') {
+    if (req.method === 'POST' && url.pathname === ENTITLEMENT_ROUTES.revoke) {
       const auth = req.headers.authorization || '';
       if (!validAdminBearer(auth, adminToken)) {
         return jsonError(res, 401, 'UNAUTHORIZED',

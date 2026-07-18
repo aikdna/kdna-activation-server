@@ -1,7 +1,13 @@
 # Changelog
 
-## 0.2.0 (2026-07-16)
+## 0.2.0 (2026-07-18)
 
+- Bind the entitlement route contract to one exported canonical route map and
+  document the atomic deployment order required by Remote 0.4.1 and later.
+- Derive entitlement `domain` validation directly from KDNA Core 0.20.0's
+  published manifest schema and gate that exact package coordinate in tests.
+- Add minimum/current Node CI, immutable workflow actions, public-surface and
+  protocol-name gates, and stable-release event verification.
 - Align entitlement `domain` values atomically with the canonical Core
   manifest `asset_id` grammar across creation, activation, sync, status,
   revocation, and stored-record validation. Package-style scoped identities
