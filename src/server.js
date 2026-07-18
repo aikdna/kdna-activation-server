@@ -550,6 +550,10 @@ function stopServer(server) {
   return new Promise((resolve) => {
     if (!server) return resolve();
     server.close(() => resolve());
+    // Node 18 does not reap keep-alive connections as part of close(). Close
+    // only idle sockets after initiating graceful shutdown so active requests
+    // may still complete while the public stop API remains deterministic.
+    server.closeIdleConnections?.();
   });
 }
 

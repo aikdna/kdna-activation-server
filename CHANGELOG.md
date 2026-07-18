@@ -8,6 +8,8 @@
   published manifest schema and gate that exact package coordinate in tests.
 - Add minimum/current Node CI, immutable workflow actions, public-surface and
   protocol-name gates, and stable-release event verification.
+- Close idle keep-alive sockets during graceful shutdown so the public stop
+  API completes deterministically on the supported Node 18 baseline.
 - Align entitlement `domain` values atomically with the canonical Core
   manifest `asset_id` grammar across creation, activation, sync, status,
   revocation, and stored-record validation. Package-style scoped identities
