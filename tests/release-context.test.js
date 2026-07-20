@@ -14,7 +14,7 @@ const {
 const ROOT = path.resolve(__dirname, '..');
 const PACKAGE_JSON = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
 const PACKAGE_LOCK = JSON.parse(fs.readFileSync(path.join(ROOT, 'package-lock.json'), 'utf8'));
-const WORKFLOW = fs.readFileSync(path.join(ROOT, '.github/workflows/publish.yml'), 'utf8');
+const PUBLISH_WORKFLOW = path.join(ROOT, '.github/workflows/publish.yml');
 const SCRIPT = path.join(ROOT, 'scripts/verify-release-context.cjs');
 
 function changelogFor(heading, extra = '') {
@@ -257,22 +257,6 @@ test('near-match, stale, and duplicate CHANGELOG headings fail closed', () => {
   }
 });
 
-test('publish workflow is release-only and passes the tag only through env', () => {
-  assert.match(WORKFLOW, /release:\s*\n\s+types: \[published\]/);
-  assert.doesNotMatch(WORKFLOW, /workflow_dispatch/);
-  assert.match(WORKFLOW, /run: node scripts\/verify-release-context\.cjs/);
-  assert.match(WORKFLOW, /actions\/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0/);
-  assert.match(WORKFLOW, /actions\/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38/);
-  assert.doesNotMatch(WORKFLOW, /actions\/(?:checkout|setup-node)@v\d+/);
-  assert.match(WORKFLOW, /RELEASE_EVENT_ACTION: \$\{\{ github\.event\.action \}\}/);
-  assert.match(WORKFLOW, /RELEASE_IS_DRAFT: \$\{\{ github\.event\.release\.draft \}\}/);
-  assert.match(WORKFLOW, /RELEASE_IS_PRERELEASE: \$\{\{ github\.event\.release\.prerelease \}\}/);
-
-  const expression = '$' + '{{ github.event.release.tag_name }}';
-  const expressionLines = WORKFLOW
-    .split(/\r?\n/)
-    .filter((line) => line.includes(expression))
-    .map((line) => line.trim());
-  assert.equal(expressionLines.includes(`RELEASE_TAG: ${expression}`), true);
-  assert.equal(expressionLines.includes(`ref: ${expression}`), true);
+test('frozen repository has no automated publish workflow', () => {
+  assert.equal(fs.existsSync(PUBLISH_WORKFLOW), false);
 });
