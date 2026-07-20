@@ -1,10 +1,3 @@
-> **Frozen historical repository**
->
-> This repository is not part of the current supported KDNA toolchain. It
-> receives no feature or compatibility work and will not publish new releases.
-> Do not use it for new integrations. Its code remains available as development
-> history.
-
 # @aikdna/kdna-activation-server
 
 **Experimental self-hostable HTTP activation server for KDNA `licensed` assets.**
