@@ -1,0 +1,53 @@
+name: Publish to npm
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.release.tag_name }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: >-
+      github.event.action == 'published' &&
+      github.event.release.draft == false &&
+      github.event.release.prerelease == false
+    runs-on: ubuntu-latest
+    env:
+      RELEASE_EVENT_ACTION: ${{ github.event.action }}
+      RELEASE_TAG: ${{ github.event.release.tag_name }}
+      RELEASE_IS_DRAFT: ${{ github.event.release.draft }}
+      RELEASE_IS_PRERELEASE: ${{ github.event.release.prerelease }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+          ref: ${{ github.event.release.tag_name }}
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        with:
+          node-version: '22.23.1'
+          check-latest: false
+          registry-url: https://registry.npmjs.org
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Verify exact release tag, package, and CHANGELOG binding
+        run: node scripts/verify-release-context.cjs
+      - run: npm test
+      - name: Verify the publish file set
+        run: npm pack --dry-run --ignore-scripts
+      - name: Publish @aikdna/kdna-activation-server
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          if npm view "@aikdna/kdna-activation-server@$VERSION" version >/dev/null 2>&1; then
+            echo "@aikdna/kdna-activation-server@$VERSION is already published; skipping."
+            exit 0
+          fi
+          npm publish --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
