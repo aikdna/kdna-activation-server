@@ -31,14 +31,20 @@ All commits must include a `Signed-off-by:` line. Use `git commit -s` to add it 
 
 This certifies that you wrote the code or have the right to submit it under the project's license (Apache-2.0). No CLA is required.
 
-## ANTI-PATTERNS
+## Repository scope
 
-Do **not** attempt to restore, shim, or reference any of these removed surfaces:
-- `legacy` — deleted in 0.27.0 hard cutover
-- an alternate numbered protocol generation — never existed; do not create
-- `registry` — deferred to future RFC (see decisions/0003)
-- `install` — no distribution in the 0.7 baseline (the 0.7 line is the public stable line as of 2026-05-22; pre-0.7 "Core GA" terminology is superseded)
-- `help-legacy` — deleted alongside legacy surface
-- `setup` / `verify` — removed commands; use `kdna create` and `kdna validate`
+This repository is the activation server component. KDNA CLI commands live in
+the separate `kdna-cli` repository; do not add CLI shims or command
+implementations here.
 
-If your PR touches any of the above, it will be rejected. Read `decisions/` for rationale.
+Notes on the current CLI surface (the `kdna-cli` source is authoritative):
+
+- `install`, `registry`, `setup`, `validate`, and `version` are live commands.
+- Registry resolution requires an explicit `KDNA_REGISTRY_URL`; there is no
+  default public registry.
+- There is no `kdna create` command. Do not reference one in docs, examples,
+  or PR text.
+
+The whole KDNA ecosystem is pre-release. No component — including this server,
+currently 0.2.0 — is Beta, stable, or GA. Do not describe any version line as
+"the public stable line" in code, docs, or PR text.
