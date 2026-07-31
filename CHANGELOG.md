@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.2.1
+
+- Read license-creation and administrator secrets only from bounded strict
+  UTF-8 stdin or a private regular file; raw secret-bearing argv forms fail
+  closed.
+- Enforce exact CLI option arity and reject unknown, positional, duplicate,
+  valued-boolean, and cross-mode combinations without echoing rejected tokens.
+- Store new license secrets as independently salted scrypt verifiers and keep
+  verifier material out of public API, signature, list, and command output.
+- Migrate a legacy plaintext record atomically only after the exact prior
+  secret succeeds; failed verification or concurrent drift preserves the
+  original bytes.
+- Gate public examples against inline secret arguments and secret-bearing curl
+  bodies.
+
 ## 0.2.0 (2026-07-18)
 
 - Bind the entitlement route contract to one exported canonical route map and

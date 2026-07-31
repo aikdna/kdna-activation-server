@@ -10,9 +10,10 @@ This package implements the legacy license-key and signed-receipt profile. It
 is not an RFC-0019 account/device external-key-grant issuer. Implementations
 must not present one profile as the other.
 
-The registry package at `0.2.0` is the published baseline. Changes visible in a
-source checkout after that release are unreleased until a later registry
-version is published; a checkout is not evidence of publication.
+The registry package at `0.2.0` is the published baseline. Repository
+`0.2.1` is an unreleased source candidate containing the secret-input and
+verifier-at-rest corrections below; it is not npm latest and a checkout is not
+evidence of publication.
 
 This server answers one question:
 
@@ -51,8 +52,11 @@ stored locally.
 ## Quick start (self-hosting)
 
 ```bash
-# 1. Install (any Node 18+ server)
-npm install -g @aikdna/kdna-activation-server
+# 1. Start from a trusted exact 0.2.1 source checkout on Node 18+.
+npm ci
+npm test
+npm pack
+npm install -g ./aikdna-kdna-activation-server-0.2.1.tgz
 
 # 2. Create private input files without placing secrets in shell arguments.
 install -m 600 /dev/null ./license-request.json
