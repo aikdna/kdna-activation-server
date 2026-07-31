@@ -1385,6 +1385,26 @@ test('CLI private stdin creates a record, list stays public, and revoke works', 
       assert.match(rejected.stderr, /not accepted in process arguments/);
       assert.doesNotMatch(rejected.stderr, /synthetic-license-secret-cli/);
     }
+
+    const argvSecret = `argv-${crypto.randomBytes(12).toString('hex')}`;
+    for (const invalid of [
+      ['--admin-token-stdin', argvSecret],
+      ['--create-license-stdin', JSON.stringify({ license_key: argvSecret })],
+      [`--list=${argvSecret}`],
+      [`--unknown=${argvSecret}`],
+      [argvSecret],
+      ['--port', '0', '--port', argvSecret],
+      ['--list', '--admin-token-file', argvSecret],
+      ['--help', '--data-dir', argvSecret],
+    ]) {
+      const rejected = spawnSync(process.execPath, [CLI, ...invalid], {
+        encoding: 'utf8',
+        input: '',
+      });
+      assert.notEqual(rejected.status, 0);
+      assert.doesNotMatch(rejected.stdout, new RegExp(argvSecret));
+      assert.doesNotMatch(rejected.stderr, new RegExp(argvSecret));
+    }
   } finally {
     fs.rmSync(dataDir, { recursive: true, force: true });
   }
