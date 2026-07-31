@@ -1,6 +1,6 @@
 {
   "name": "@aikdna/kdna-activation-server",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Self-hostable KDNA entitlement service for license activation, synchronization, revocation, and signed status records.",
   "type": "commonjs",
   "main": "src/index.js",
@@ -19,6 +19,7 @@
     "start": "node bin/kdna-activation-server.js",
     "check:public-surface": "node scripts/check-public-surface.js",
     "check:protocol-names": "node scripts/check-protocol-names.js",
+    "lint": "node scripts/check-syntax.js",
     "test": "node scripts/check-public-surface.js && node scripts/check-protocol-names.js && node --test tests/*.test.js",
     "prepublishOnly": "npm test"
   },
