@@ -80,6 +80,9 @@ That's it. No registration, no phone-home, no KDNA Inc. URL.
 Do not replace a placeholder with a real secret inside a command argument.
 `--create-license-stdin` and `--admin-token-stdin` are available when a
 deployer's secret provider can pipe bounded strict UTF-8 directly.
+The CLI rejects unknown options, unexpected positional values, duplicate
+options, cross-mode combinations, and values attached to boolean stdin flags;
+these errors never echo the rejected token.
 
 ---
 

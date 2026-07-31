@@ -31,14 +31,29 @@ const {
 } = require('../src/private-input');
 const pkg = require('../package.json');
 
+const BOOLEAN_OPTIONS = new Set([
+  'help',
+  'list',
+  'create-license-stdin',
+  'admin-token-stdin',
+]);
+const VALUE_OPTIONS = new Set([
+  'port',
+  'host',
+  'data-dir',
+  'admin-token-file',
+  'create-license-file',
+  'revoke',
+  'reason',
+]);
+const REJECTED_SECRET_OPTIONS = new Set(['admin-token', 'create-license']);
+
 function rejectSecretArguments(argv) {
   for (const argument of argv) {
-    if (
-      argument === '--admin-token' ||
-      argument.startsWith('--admin-token=') ||
-      argument === '--create-license' ||
-      argument.startsWith('--create-license=')
-    ) {
+    const name = argument.startsWith('--')
+      ? argument.slice(2).split('=', 1)[0]
+      : '';
+    if (REJECTED_SECRET_OPTIONS.has(name)) {
       throw new Error(
         'Secrets are not accepted in process arguments. Use the matching --stdin or --file option.',
       );
@@ -47,23 +62,119 @@ function rejectSecretArguments(argv) {
 }
 
 function parseArgs(argv) {
-  const out = {};
+  const out = Object.create(null);
   for (let i = 0; i < argv.length; i++) {
-    const a = argv[i];
-    if (a.startsWith('--')) {
-      const key = a.slice(2);
-      const eq = key.indexOf('=');
-      if (eq >= 0) {
-        out[key.slice(0, eq)] = key.slice(eq + 1);
-      } else if (i + 1 < argv.length && !argv[i + 1].startsWith('--')) {
-        out[key] = argv[i + 1];
-        i++;
-      } else {
-        out[key] = true;
-      }
+    const argument = argv[i];
+    if (argument === '-h') {
+      setOption(out, 'help', true);
+      continue;
     }
+    if (!argument.startsWith('--')) {
+      throw new Error('Unexpected positional command-line argument.');
+    }
+
+    const equals = argument.indexOf('=');
+    const name = argument.slice(2, equals === -1 ? undefined : equals);
+    if (REJECTED_SECRET_OPTIONS.has(name)) {
+      throw new Error(
+        'Secrets are not accepted in process arguments. Use the matching --stdin or --file option.',
+      );
+    }
+    if (BOOLEAN_OPTIONS.has(name)) {
+      if (equals !== -1) {
+        throw new Error('A boolean command-line option was given an unexpected value.');
+      }
+      setOption(out, name, true);
+      continue;
+    }
+    if (!VALUE_OPTIONS.has(name)) {
+      throw new Error('Unknown command-line option.');
+    }
+
+    let value;
+    if (equals !== -1) {
+      value = argument.slice(equals + 1);
+      if (value.length === 0) {
+        throw new Error('A command-line option is missing its required value.');
+      }
+    } else {
+      const next = argv[i + 1];
+      if (next === undefined || next === '-h' || next.startsWith('--')) {
+        throw new Error('A command-line option is missing its required value.');
+      }
+      value = next;
+      i += 1;
+    }
+    setOption(out, name, value);
   }
+  validateCommandShape(out);
   return out;
+}
+
+function setOption(out, name, value) {
+  if (Object.prototype.hasOwnProperty.call(out, name)) {
+    throw new Error('A command-line option was provided more than once.');
+  }
+  out[name] = value;
+}
+
+function validateCommandShape(args) {
+  const present = new Set(Object.keys(args));
+  if (present.has('help')) {
+    if (present.size !== 1) throw new Error('Help cannot be combined with another option.');
+    return;
+  }
+
+  const actions = [
+    present.has('create-license-stdin') || present.has('create-license-file')
+      ? 'create'
+      : null,
+    present.has('list') ? 'list' : null,
+    present.has('revoke') ? 'revoke' : null,
+  ].filter(Boolean);
+  if (actions.length > 1) {
+    throw new Error('Choose exactly one server or one-shot command mode.');
+  }
+
+  if (actions[0] === 'create') {
+    assertExactlyOne(args, ['create-license-stdin', 'create-license-file']);
+    assertOnly(present, ['create-license-stdin', 'create-license-file', 'data-dir']);
+    return;
+  }
+  if (actions[0] === 'list') {
+    assertOnly(present, ['list', 'data-dir']);
+    return;
+  }
+  if (actions[0] === 'revoke') {
+    if (!present.has('reason')) throw new Error('Revoke requires one reason.');
+    assertOnly(present, ['revoke', 'reason', 'data-dir']);
+    return;
+  }
+
+  if (present.has('reason')) {
+    throw new Error('A reason is valid only with revoke.');
+  }
+  assertExactlyZeroOrOne(args, ['admin-token-stdin', 'admin-token-file']);
+  assertOnly(present, ['port', 'host', 'data-dir', 'admin-token-stdin', 'admin-token-file']);
+}
+
+function assertOnly(present, allowed) {
+  const allowedSet = new Set(allowed);
+  if ([...present].some((name) => !allowedSet.has(name))) {
+    throw new Error('Command-line options from different modes cannot be combined.');
+  }
+}
+
+function assertExactlyOne(args, names) {
+  if (names.filter((name) => args[name] !== undefined).length !== 1) {
+    throw new Error('Choose exactly one private input source.');
+  }
+}
+
+function assertExactlyZeroOrOne(args, names) {
+  if (names.filter((name) => args[name] !== undefined).length > 1) {
+    throw new Error('Choose at most one private input source.');
+  }
 }
 
 function help() {
@@ -183,8 +294,8 @@ async function main() {
   // Start the server
   const port = args.port ? parseInt(args.port, 10) : 3001;
   const host = args.host || '127.0.0.1';
-  if (isNaN(port)) {
-    process.stderr.write(`Error: invalid port: ${args.port}\n`);
+  if (!Number.isInteger(port) || String(port) !== String(args.port ?? port) || port < 0 || port > 65535) {
+    process.stderr.write('Error: --port must be one integer from 0 through 65535.\n');
     process.exit(1);
   }
 
