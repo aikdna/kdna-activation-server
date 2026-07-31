@@ -4,6 +4,7 @@
 const crypto = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
+const { unsafeSecretExamples } = require('./public-secret-example-policy');
 
 const root = path.resolve(__dirname, '..');
 const excluded = new Set(['.git', 'node_modules']);
@@ -69,6 +70,11 @@ function visit(directory) {
 }
 
 visit(root);
+for (const finding of unsafeSecretExamples(
+  fs.readFileSync(path.join(root, 'README.md'), 'utf8'),
+)) {
+  findings.push(`README.md: ${finding}`);
+}
 const licenseDigest = crypto
   .createHash('sha256')
   .update(fs.readFileSync(path.join(root, 'LICENSE')))

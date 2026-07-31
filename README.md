@@ -10,6 +10,10 @@ This package implements the legacy license-key and signed-receipt profile. It
 is not an RFC-0019 account/device external-key-grant issuer. Implementations
 must not present one profile as the other.
 
+The registry package at `0.2.0` is the published baseline. Changes visible in a
+source checkout after that release are unreleased until a later registry
+version is published; a checkout is not evidence of publication.
+
 This server answers one question:
 
 > Is this user / device / organisation currently entitled to use this
@@ -50,25 +54,32 @@ stored locally.
 # 1. Install (any Node 18+ server)
 npm install -g @aikdna/kdna-activation-server
 
-# 2. Create your first license
-kdna-activation-server --create-license '{
-  "domain": "kdna:yourname:your-asset",
-  "license_key": "<license-secret>",
-  "issued_to": "customer@example.com",
-  "ttl_days": 365
-}'
+# 2. Create private input files without placing secrets in shell arguments.
+install -m 600 /dev/null ./license-request.json
+${EDITOR:?Set EDITOR} ./license-request.json
+kdna-activation-server --create-license-file ./license-request.json
+rm ./license-request.json
 
-# 3. Start the server
-kdna-activation-server --port 3001 --admin-token "your-secret"
+install -m 600 /dev/null ./admin-token
+${EDITOR:?Set EDITOR} ./admin-token
 
-# 4. Test
+# 3. Start the server. The token file must remain private.
+kdna-activation-server --port 3001 --admin-token-file ./admin-token
+
+# 4. Test. Create the request body with a private editor, not inline argv.
 curl http://localhost:3001/healthz
+install -m 600 /dev/null ./activation-request.json
+${EDITOR:?Set EDITOR} ./activation-request.json
 curl -X POST http://localhost:3001/entitlements/activate \
   -H 'Content-Type: application/json' \
-  -d '{"domain":"kdna:yourname:your-asset","license_key":"<license-secret>","machine_fingerprint":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}'
+  --data-binary @./activation-request.json
+rm ./activation-request.json
 ```
 
 That's it. No registration, no phone-home, no KDNA Inc. URL.
+Do not replace a placeholder with a real secret inside a command argument.
+`--create-license-stdin` and `--admin-token-stdin` are available when a
+deployer's secret provider can pipe bounded strict UTF-8 directly.
 
 ---
 
@@ -172,8 +183,9 @@ return the same `NOT_FOUND` response as an unknown record, so public
 ## CLI
 
 ```bash
-# Create a license (one-shot)
-kdna-activation-server --create-license '{"domain":"kdna:creator:asset","license_key":"<license-secret>"}'
+# Create a license (one-shot) from a private request body
+kdna-activation-server --create-license-stdin < ./license-request.json
+# or: kdna-activation-server --create-license-file ./license-request.json
 
 # List all licenses
 kdna-activation-server --list
@@ -181,8 +193,9 @@ kdna-activation-server --list
 # Revoke
 kdna-activation-server --revoke lic_abc123 --reason "payment_failed"
 
-# Start the server
-kdna-activation-server --port 3001 --admin-token "your-secret"
+# Start the server with one private token source
+kdna-activation-server --port 3001 --admin-token-file ./admin-token
+# or: kdna-activation-server --port 3001 --admin-token-stdin
 ```
 
 The server keypair is auto-generated on first start and
@@ -198,11 +211,19 @@ mode 0600.
 - **The server keypair is local.** The private key never
   leaves the deployer's machine.
 - **The admin token is deployer-controlled.** Set it at
-  startup or omit it to disable `/revoke` over HTTP.
+  startup through bounded strict UTF-8 stdin or a private regular file, or omit
+  it to disable `/revoke` over HTTP. Raw `--admin-token` argv is rejected.
 - **The license_key is a request secret.** It is accepted only in activation
   and sync JSON request bodies. The server does not return it in signed
   records, status responses, errors, or command output. Clients should not
-  place it in URLs or logs.
+  place it in URLs, argv, or logs. License creation reads private JSON through
+  stdin or a private file; raw `--create-license` argv is rejected.
+- **License secrets are verifier-only at rest.** New records store an
+  independently salted, bounded-parameter scrypt verifier, never the plaintext
+  `license_key`. Verification is constant-time. A legacy plaintext record is
+  atomically rewritten only after the caller supplies the exact old secret;
+  failed verification or concurrent drift leaves the original bytes intact.
+  Salt and verifier bytes are server-only and are not usable as a license key.
 - **Records are signed.** Every `/activate` and `/sync`
   response is signed with the server's Ed25519 key. Clients
   can verify against `/server/identity`.

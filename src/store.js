@@ -21,6 +21,9 @@
  * Machine-bound server records persist a purpose-separated keyed digest in
  * `machine_binding_digest`; raw `machine_fingerprint` values are accepted only
  * as legacy migration input and are removed after an exact successful match.
+ * License request secrets are persisted only as bounded scrypt verifiers.
+ * Legacy plaintext records migrate atomically only after the supplied secret
+ * succeeds; failed verification leaves the original bytes untouched.
  */
 
 'use strict';
@@ -32,6 +35,18 @@ const { ASSET_ID_RE, isCanonicalAssetId } = require('./contract');
 
 const MACHINE_BINDING_DIGEST_RE = /^[0-9a-f]{64}$/;
 const CANONICAL_DOMAIN_RE = ASSET_ID_RE;
+const LICENSE_SECRET_PROFILE = 'scrypt';
+const LICENSE_SECRET_VERSION = '1';
+const LICENSE_SECRET_MAX_BYTES = 4096;
+const LICENSE_SECRET_SALT_BYTES = 16;
+const LICENSE_SECRET_KEY_BYTES = 32;
+const BASE64URL_RE = /^[A-Za-z0-9_-]+$/;
+const LICENSE_SECRET_SCRYPT = Object.freeze({
+  N: 16384,
+  r: 8,
+  p: 1,
+  maxmem: 64 * 1024 * 1024,
+});
 
 const DEFAULT_DATA_DIR = path.join(
   process.env.HOME || process.env.USERPROFILE || '.',
@@ -124,30 +139,63 @@ function makeStore(dataDir) {
     if (typeof licenseKey !== 'string' || licenseKey.length === 0) return null;
     if (!isCanonicalDomain(domain)) return null;
     for (const rec of authoritativeRecords()) {
-      if (rec.domain === domain && equalSecrets(rec.license_key, licenseKey)) return rec;
+      if (rec.domain !== domain) continue;
+      if (
+        rec.license_secret_verifier &&
+        verifyLicenseSecret(licenseKey, rec.license_secret_verifier)
+      ) {
+        return rec;
+      }
+      if (rec.license_key && equalSecrets(rec.license_key, licenseKey)) {
+        const migrated = {
+          ...rec,
+          license_secret_verifier: createLicenseSecretVerifier(licenseKey),
+        };
+        delete migrated.license_key;
+        return put(migrated, { expectedLegacySecret: licenseKey });
+      }
     }
     return null;
   }
 
-  function put(record) {
+  function put(record, { expectedLegacySecret } = {}) {
     if (!record || !record.license_id) {
       throw new Error('record.license_id is required');
     }
     validateLicenseId(record.license_id);
     validateDomain(record.domain);
-    validateLicenseSecret(record.license_key);
+    if (Object.prototype.hasOwnProperty.call(record, 'license_key')) {
+      throw new Error('plaintext license_key cannot be written to entitlement storage');
+    }
+    validateLicenseSecretVerifier(record.license_secret_verifier);
     const p = recordPath(record.license_id);
-    record.updated_at = new Date().toISOString();
+    const next = { ...record, updated_at: new Date().toISOString() };
     const tmp = `${p}.${process.pid}.${crypto.randomBytes(6).toString('hex')}.tmp`;
+    const lock = `${p}.lock`;
+    let lockFd;
     try {
-      fs.writeFileSync(tmp, JSON.stringify(record, null, 2) + '\n', {
+      lockFd = fs.openSync(lock, 'wx', 0o600);
+      if (expectedLegacySecret !== undefined) {
+        const current = get(record.license_id);
+        if (
+          !current ||
+          current.domain !== record.domain ||
+          typeof current.license_key !== 'string' ||
+          !equalSecrets(current.license_key, expectedLegacySecret)
+        ) {
+          throw new Error('legacy license secret changed before migration');
+        }
+      }
+      fs.writeFileSync(tmp, JSON.stringify(next, null, 2) + '\n', {
         mode: 0o600,
         flag: 'wx',
       });
       fs.renameSync(tmp, p);
       fs.chmodSync(p, 0o600);
     } finally {
+      if (lockFd !== undefined) fs.closeSync(lockFd);
       fs.rmSync(tmp, { force: true });
+      if (lockFd !== undefined) fs.rmSync(lock, { force: true });
     }
 
     // Successful writes migrate an exact legacy record to the collision-free
@@ -164,7 +212,7 @@ function makeStore(dataDir) {
         // record has already been written safely.
       }
     }
-    return record;
+    return next;
   }
 
   function compareAndBindMachine(licenseId, {
@@ -243,7 +291,7 @@ function makeStore(dataDir) {
     const record = {
       version: '1.0',
       license_id,
-      license_key,
+      license_secret_verifier: createLicenseSecretVerifier(license_key),
       domain,
       issued_to: issued_to || null,
       issued_at: issued_at || new Date().toISOString(),
@@ -259,7 +307,14 @@ function makeStore(dataDir) {
       offline_grace_days: typeof offline_grace_days === 'number' ? offline_grace_days : 7,
       allowed_agents: Array.isArray(allowed_agents) ? allowed_agents : null,
     };
-    return put(record);
+    const stored = put(record);
+    Object.defineProperty(stored, 'license_key', {
+      value: license_key,
+      enumerable: false,
+      configurable: false,
+      writable: false,
+    });
+    return stored;
   }
 
   function revoke(licenseId, { reason, revoked_by } = {}) {
@@ -323,6 +378,10 @@ function validateLicenseSecret(licenseKey) {
   if (typeof licenseKey !== 'string') {
     throw new Error('license_key must be a non-empty string');
   }
+  const bytes = Buffer.byteLength(licenseKey, 'utf8');
+  if (bytes > LICENSE_SECRET_MAX_BYTES) {
+    throw new Error(`license_key exceeds ${LICENSE_SECRET_MAX_BYTES} UTF-8 bytes`);
+  }
   return licenseKey;
 }
 
@@ -335,8 +394,114 @@ function validateStoredRecord(record, expectedLicenseId) {
     throw new Error('canonical record identifier does not match its storage key');
   }
   validateDomain(record.domain);
-  validateLicenseSecret(record.license_key);
+  const hasPlaintext = Object.prototype.hasOwnProperty.call(record, 'license_key');
+  const hasVerifier = Object.prototype.hasOwnProperty.call(record, 'license_secret_verifier');
+  if (hasPlaintext === hasVerifier) {
+    throw new Error('stored entitlement must contain exactly one license secret authority');
+  }
+  if (hasPlaintext) validateLicenseSecret(record.license_key);
+  else validateLicenseSecretVerifier(record.license_secret_verifier);
   return record;
+}
+
+function createLicenseSecretVerifier(licenseKey, salt = crypto.randomBytes(LICENSE_SECRET_SALT_BYTES)) {
+  validateLicenseSecret(licenseKey);
+  if (!Buffer.isBuffer(salt) || salt.length !== LICENSE_SECRET_SALT_BYTES) {
+    throw new Error('license secret verifier salt is invalid');
+  }
+  const secretBytes = Buffer.from(licenseKey, 'utf8');
+  let derived;
+  try {
+    derived = crypto.scryptSync(
+      secretBytes,
+      salt,
+      LICENSE_SECRET_KEY_BYTES,
+      LICENSE_SECRET_SCRYPT,
+    );
+    return {
+      profile: LICENSE_SECRET_PROFILE,
+      version: LICENSE_SECRET_VERSION,
+      salt: salt.toString('base64url'),
+      derived_key: derived.toString('base64url'),
+      parameters: {
+        N: LICENSE_SECRET_SCRYPT.N,
+        r: LICENSE_SECRET_SCRYPT.r,
+        p: LICENSE_SECRET_SCRYPT.p,
+        key_length: LICENSE_SECRET_KEY_BYTES,
+      },
+    };
+  } finally {
+    secretBytes.fill(0);
+    if (derived) derived.fill(0);
+  }
+}
+
+function validateLicenseSecretVerifier(verifier) {
+  if (!verifier || typeof verifier !== 'object' || Array.isArray(verifier)) {
+    throw new Error('license secret verifier is required');
+  }
+  if (
+    verifier.profile !== LICENSE_SECRET_PROFILE ||
+    verifier.version !== LICENSE_SECRET_VERSION ||
+    verifier.parameters?.N !== LICENSE_SECRET_SCRYPT.N ||
+    verifier.parameters?.r !== LICENSE_SECRET_SCRYPT.r ||
+    verifier.parameters?.p !== LICENSE_SECRET_SCRYPT.p ||
+    verifier.parameters?.key_length !== LICENSE_SECRET_KEY_BYTES
+  ) {
+    throw new Error('license secret verifier parameters are invalid');
+  }
+  if (
+    typeof verifier.salt !== 'string' ||
+    typeof verifier.derived_key !== 'string' ||
+    !BASE64URL_RE.test(verifier.salt) ||
+    !BASE64URL_RE.test(verifier.derived_key)
+  ) {
+    throw new Error('license secret verifier encoding is invalid');
+  }
+  let salt;
+  let derived;
+  try {
+    salt = Buffer.from(verifier.salt, 'base64url');
+    derived = Buffer.from(verifier.derived_key, 'base64url');
+  } catch {
+    throw new Error('license secret verifier encoding is invalid');
+  }
+  if (salt.length !== LICENSE_SECRET_SALT_BYTES || derived.length !== LICENSE_SECRET_KEY_BYTES) {
+    throw new Error('license secret verifier length is invalid');
+  }
+  if (
+    salt.toString('base64url') !== verifier.salt ||
+    derived.toString('base64url') !== verifier.derived_key
+  ) {
+    throw new Error('license secret verifier encoding is not canonical');
+  }
+  return verifier;
+}
+
+function verifyLicenseSecret(licenseKey, verifier) {
+  let secretBytes;
+  let expected;
+  let actual;
+  try {
+    validateLicenseSecret(licenseKey);
+    validateLicenseSecretVerifier(verifier);
+    const salt = Buffer.from(verifier.salt, 'base64url');
+    expected = Buffer.from(verifier.derived_key, 'base64url');
+    secretBytes = Buffer.from(licenseKey, 'utf8');
+    actual = crypto.scryptSync(
+      secretBytes,
+      salt,
+      verifier.parameters.key_length,
+      LICENSE_SECRET_SCRYPT,
+    );
+    return crypto.timingSafeEqual(actual, expected);
+  } catch {
+    return false;
+  } finally {
+    if (secretBytes) secretBytes.fill(0);
+    if (expected) expected.fill(0);
+    if (actual) actual.fill(0);
+  }
 }
 
 function encodeLicenseId(licenseId) {
@@ -380,7 +545,11 @@ function equalSecrets(left, right) {
 module.exports = {
   CANONICAL_DOMAIN_RE,
   DEFAULT_DATA_DIR,
+  LICENSE_SECRET_MAX_BYTES,
+  createLicenseSecretVerifier,
+  encodeLicenseId,
   isCanonicalDomain,
   makeStore,
   validateDomain,
+  verifyLicenseSecret,
 };

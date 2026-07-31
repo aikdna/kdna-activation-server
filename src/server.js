@@ -396,6 +396,7 @@ function makeRequestHandler(opts) {
 function stripForApi(rec) {
   const out = { ...rec };
   delete out.license_key;
+  delete out.license_secret_verifier;
   delete out.revoked_by;
   delete out.machine_binding_digest;
   delete out.machine_fingerprint;
