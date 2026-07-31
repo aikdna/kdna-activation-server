@@ -1,5 +1,5 @@
 /**
- * signing.js — Ed25519 signing of entitlement records (Story 24)
+ * signing.js — Ed25519 signing of entitlement records
  *
  * The activation server can sign the entitlement records it
  * returns. This lets clients verify that a record really came
@@ -13,10 +13,10 @@
  *
  * This is the creator's identity key for the activation server.
  * The same identity model as kdna-cli's `kdna identity init`
- * (Story 19) — but in a separate file because the server
+ * — but in a separate file because the server
  * identity is the SERVER's, not the deployer's CLI identity.
  *
- * Story 19 design contract:
+ * Identity design contract:
  *   - Each actor generates their own key pair.
  *   - KDNA Inc. holds NO private keys.
  *   - No TUF, no registry, no central authority.

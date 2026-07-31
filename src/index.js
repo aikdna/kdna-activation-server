@@ -1,5 +1,5 @@
 /**
- * index.js — public API for @aikdna/kdna-activation-server (Story 24)
+ * index.js — public API for @aikdna/kdna-activation-server
  */
 
 'use strict';

@@ -11,6 +11,20 @@ const textExtensions = new Set(['.js', '.json', '.md', '.yml', '.yaml', '.txt'])
 const canonicalApacheLicenseSha256 =
   '699a9bdd9d3fb95f2146586a5fb1d7a6a6197a43422914f86869fed84c34222c';
 const findings = [];
+const internalStoryPattern = new RegExp(
+  `\\b${['Sto', 'ry'].join('')}\\s+\\d+\\b`,
+  'iu',
+);
+const internalGovernancePatterns = [
+  new RegExp(`${['owner', 'approved'].join('[- ]')}`, 'iu'),
+  new RegExp(`${['owner', 'reviewed'].join('[- ]')}`, 'iu'),
+  new RegExp(`${['fact', 'card'].join('[- ]')}`, 'iu'),
+  new RegExp(`${['branch', 'strategy'].join('[- ]')}`, 'iu'),
+  new RegExp(
+    `${['no', 'tag'].join(' ')}.{0,24}${['release', 'automation'].join(' ')}`,
+    'iu',
+  ),
+];
 
 function visit(directory) {
   for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
@@ -40,6 +54,16 @@ function visit(directory) {
     }
     if (/(?:^|\/)(?:AGENTS|WORKLOG)\.md$/i.test(relative)) {
       findings.push(`${relative}: private coordination file`);
+    }
+    const historical = relative === 'CHANGELOG.md' || relative.startsWith('evidence/');
+    if (!historical && internalStoryPattern.test(text)) {
+      findings.push(`${relative}: internal work-package number on current public surface`);
+    }
+    if (
+      !historical &&
+      internalGovernancePatterns.some((pattern) => pattern.test(text))
+    ) {
+      findings.push(`${relative}: internal release-governance narrative`);
     }
   }
 }

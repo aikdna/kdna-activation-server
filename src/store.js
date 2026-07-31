@@ -1,5 +1,5 @@
 /**
- * store.js — entitlement record storage (Story 24)
+ * store.js — entitlement record storage
  *
  * Per docs/REMOTE_MODE.md and specs/kdna-entitlement-api.md,
  * the activation server stores entitlement records. The design
