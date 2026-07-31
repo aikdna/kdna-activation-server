@@ -7,8 +7,8 @@
  *
  * Usage:
  *   kdna-activation-server [--port 3001] [--data-dir <path>]
- *                          [--admin-token <secret>]
- *                          [--create-license <json>]
+ *                          [--admin-token-stdin|--admin-token-file <path>]
+ *                          [--create-license-stdin|--create-license-file <path>]
  *                          [--list]
  *                          [--revoke <license-id> --reason "..."]
  *
@@ -23,7 +23,28 @@ const path = require('node:path');
 const fs = require('node:fs');
 const { startServer, stopServer } = require('../src/server');
 const { makeStore, DEFAULT_DATA_DIR } = require('../src/store');
+const {
+  MAX_ADMIN_TOKEN_BYTES,
+  MAX_LICENSE_REQUEST_BYTES,
+  readPrivateFile,
+  readPrivateStdin,
+} = require('../src/private-input');
 const pkg = require('../package.json');
+
+function rejectSecretArguments(argv) {
+  for (const argument of argv) {
+    if (
+      argument === '--admin-token' ||
+      argument.startsWith('--admin-token=') ||
+      argument === '--create-license' ||
+      argument.startsWith('--create-license=')
+    ) {
+      throw new Error(
+        'Secrets are not accepted in process arguments. Use the matching --stdin or --file option.',
+      );
+    }
+  }
+}
 
 function parseArgs(argv) {
   const out = {};
@@ -50,7 +71,8 @@ function help() {
 
 Usage:
   kdna-activation-server [serve options]
-  kdna-activation-server --create-license '<json>' [--data-dir <path>]
+  kdna-activation-server --create-license-stdin [--data-dir <path>]
+  kdna-activation-server --create-license-file <path> [--data-dir <path>]
   kdna-activation-server --list [--data-dir <path>]
   kdna-activation-server --revoke <license-id> --reason "..." [--data-dir <path>]
 
@@ -60,14 +82,18 @@ Server options:
   --data-dir <path>      Where to store entitlement records +
                          server keypair. Default
                          ~/.kdna/activation-server.
-  --admin-token <secret> Bearer token for the /entitlements/revoke
-                         endpoint. If unset, /revoke returns 401.
-                         Set this if you want to be able to revoke
-                         licenses via HTTP.
+  --admin-token-stdin    Read the revoke bearer token from bounded strict
+                         UTF-8 stdin before starting the server.
+  --admin-token-file <path>
+                         Read it from a regular private file that is
+                         inaccessible to group/other users.
 
 One-shot commands (do not start the server):
-  --create-license '<json>'
-                        Create a new license record. The JSON
+  --create-license-stdin
+                        Read one bounded strict UTF-8 JSON request from stdin.
+  --create-license-file <path>
+                        Read the request from a regular private file.
+                        The JSON
                         must contain: domain, license_key. Domain
                         must use canonical asset_id syntax such as
                         kdna:creator:asset.
@@ -88,7 +114,9 @@ Self-hosting:
 }
 
 async function main() {
-  const args = parseArgs(process.argv.slice(2));
+  const argv = process.argv.slice(2);
+  rejectSecretArguments(argv);
+  const args = parseArgs(argv);
   if (args.help || args.h) {
     process.stdout.write(help());
     return;
@@ -99,17 +127,32 @@ async function main() {
   const store = makeStore(dataDir);
 
   // One-shot commands
-  if (args['create-license']) {
+  const createSources = [
+    args['create-license-stdin'] ? 'stdin' : null,
+    args['create-license-file'] ? 'file' : null,
+  ].filter(Boolean);
+  if (createSources.length > 1) {
+    throw new Error('Choose exactly one create-license private input source.');
+  }
+  if (createSources.length === 1) {
     let body;
     try {
-      body = JSON.parse(args['create-license']);
-    } catch (e) {
-      process.stderr.write(`Error: --create-license value is not valid JSON: ${e.message}\n`);
-      process.exit(1);
+      const text =
+        createSources[0] === 'stdin'
+          ? readPrivateStdin({
+              label: 'License creation request',
+              maximum: MAX_LICENSE_REQUEST_BYTES,
+            })
+          : readPrivateFile(args['create-license-file'], {
+              label: 'License creation request',
+              maximum: MAX_LICENSE_REQUEST_BYTES,
+            });
+      body = JSON.parse(text);
+    } catch {
+      throw new Error('License creation input is not valid private JSON.');
     }
     if (!body.domain || !body.license_key) {
-      process.stderr.write(`Error: --create-license JSON must include domain and license_key\n`);
-      process.exit(1);
+      throw new Error('License creation JSON must include domain and license_key.');
     }
     const rec = store.create(body);
     process.stdout.write(`Created license:\n  ${JSON.stringify(stripLicenseSecret(rec), null, 2)}\n`);
@@ -145,28 +188,43 @@ async function main() {
     process.exit(1);
   }
 
+  const adminSources = [
+    args['admin-token-stdin'] ? 'stdin' : null,
+    args['admin-token-file'] ? 'file' : null,
+  ].filter(Boolean);
+  if (adminSources.length > 1) {
+    throw new Error('Choose exactly one admin-token private input source.');
+  }
+  const adminToken =
+    adminSources.length === 0
+      ? null
+      : adminSources[0] === 'stdin'
+        ? readPrivateStdin({ label: 'Admin token', maximum: MAX_ADMIN_TOKEN_BYTES })
+        : readPrivateFile(args['admin-token-file'], {
+            label: 'Admin token',
+            maximum: MAX_ADMIN_TOKEN_BYTES,
+          });
+
   const { server, port: actualPort, keys, dataDir: dd } = await startServer({
     dataDir,
     port,
     host,
-    adminToken: args['admin-token'] || null,
+    adminToken,
   });
 
   process.stdout.write(
     `kdna-activation-server ${pkg.version} listening on http://${host}:${actualPort}\n` +
       `  data_dir:     ${dd}\n` +
-      `  admin_token:  ${args['admin-token'] ? '(configured)' : '(NOT set — /revoke returns 401)'}\n` +
+      `  admin_token:  ${adminToken ? '(configured from private input)' : '(NOT set — /revoke returns 401)'}\n` +
       `  public_key:   ${keys.publicPem.length} bytes (PEM, ed25519)\n` +
       `\n` +
       `Try:\n` +
       `  curl http://${host}:${actualPort}/healthz\n` +
       `  curl http://${host}:${actualPort}/server/identity\n` +
-      `  curl -X POST http://${host}:${actualPort}/entitlements/activate \\\n` +
-      `    -H 'Content-Type: application/json' \\\n` +
-      `    -d '{"domain":"kdna:yourname:your-asset","license_key":"<license-secret>","machine_fingerprint":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}'\n` +
+      `  Send activation JSON through stdin or a private request-body file; never place secrets in argv.\n` +
       `\n` +
-      `Create a license:\n` +
-      `  kdna-activation-server --create-license '{"domain":"kdna:yourname:your-asset","license_key":"<license-secret>"}'\n`,
+      `Create a license from private stdin:\n` +
+      `  kdna-activation-server --create-license-stdin\n`,
   );
 
   const shutdown = (signal) => {
@@ -180,6 +238,7 @@ async function main() {
 function stripLicenseSecret(record) {
   const out = { ...record };
   delete out.license_key;
+  delete out.license_secret_verifier;
   return out;
 }
 

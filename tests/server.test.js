@@ -21,7 +21,7 @@
  *      (Ed25519 round-trip)
  *  12. Server does not call back to any KDNA Inc. URL during
  *      normal operation (no external network calls)
- *  13. CLI one-shot commands work: --create-license, --list,
+ *  13. CLI one-shot commands work: --create-license-stdin, --list,
  *      --revoke
  *
  * Run: node --test tests/
@@ -35,7 +35,7 @@ const path = require('node:path');
 const fs = require('node:fs');
 const os = require('node:os');
 const net = require('node:net');
-const { spawnSync } = require('node:child_process');
+const { spawn, spawnSync } = require('node:child_process');
 const crypto = require('node:crypto');
 
 const {
@@ -52,6 +52,7 @@ const {
 } = require('../src/index');
 const corePackage = require('@aikdna/kdna-core/package.json');
 const coreManifestSchema = require('@aikdna/kdna-core/schema/manifest.schema.json');
+const { encodeLicenseId } = require('../src/store');
 
 const CLI = path.resolve(__dirname, '..', 'bin', 'kdna-activation-server.js');
 const MACHINE_A = 'a'.repeat(64);
@@ -86,6 +87,18 @@ function recordJsonFiles(dataDir) {
   return fs.readdirSync(dataDir)
     .filter((name) => name.endsWith('.json'))
     .map((name) => path.join(dataDir, name));
+}
+
+function assertVerifierRecord(record) {
+  assert.equal(record.license_key, undefined);
+  assert.equal(record.license_secret_verifier.profile, 'scrypt');
+  assert.equal(record.license_secret_verifier.version, '1');
+  assert.equal(record.license_secret_verifier.parameters.N, 16384);
+  assert.equal(record.license_secret_verifier.parameters.r, 8);
+  assert.equal(record.license_secret_verifier.parameters.p, 1);
+  assert.equal(record.license_secret_verifier.parameters.key_length, 32);
+  assert.equal(Buffer.from(record.license_secret_verifier.salt, 'base64url').length, 16);
+  assert.equal(Buffer.from(record.license_secret_verifier.derived_key, 'base64url').length, 32);
 }
 
 async function withServer(opts, fn) {
@@ -160,6 +173,7 @@ test('/entitlements/activate returns a signed record for valid key', async () =>
     assert.equal(body.status, 'active');
     assert.equal(body.domain, 'kdna:x:y');
     assert.equal(body.license_key, undefined);
+    assert.equal(body.license_secret_verifier, undefined);
     assert.doesNotMatch(JSON.stringify(body), /synthetic-license-secret-test/);
     assert.equal(body.machine_fingerprint, MACHINE_A);
     assert.match(body.signature_base64, /^[A-Za-z0-9+/=]+$/);
@@ -297,6 +311,7 @@ test('/entitlements/status returns public metadata without license_key', async (
     assert.equal(body.domain, 'kdna:x:y');
     assert.equal(body.license_id, rec.license_id);
     assert.equal(body.license_key, undefined);
+    assert.equal(body.license_secret_verifier, undefined);
     assert.equal(body.machine_binding_digest, undefined);
     assert.equal(body.machine_fingerprint, undefined);
   });
@@ -587,9 +602,9 @@ test('license identifiers have collision-free storage and exact lookup semantics
       require_machine_binding: false,
     });
     assert.equal(recordJsonFiles(dataDir).length, 3);
-    assert.equal(store.get(colon.license_id).license_key, colon.license_key);
-    assert.equal(store.get(dot.license_id).license_key, dot.license_key);
-    assert.equal(store.get(upper.license_id).license_key, upper.license_key);
+    assertVerifierRecord(store.get(colon.license_id));
+    assertVerifierRecord(store.get(dot.license_id));
+    assertVerifierRecord(store.get(upper.license_id));
     assert.deepEqual(store.list().map((record) => record.license_id).sort(), [
       'LIC:ALIAS',
       'lic.alias',
@@ -629,6 +644,103 @@ test('license identifiers have collision-free storage and exact lookup semantics
   });
 });
 
+test('license secrets are salted at rest and exact whitespace remains part of the secret', () => {
+  const dataDir = makeDataDir();
+  try {
+    const store = makeStore(dataDir);
+    const secret = ' leading and trailing secret ';
+    const first = store.create({
+      domain: 'kdna:secret:first',
+      license_key: secret,
+      license_id: 'lic_secret_first',
+      require_machine_binding: false,
+    });
+    const second = store.create({
+      domain: 'kdna:secret:second',
+      license_key: secret,
+      license_id: 'lic_secret_second',
+      require_machine_binding: false,
+    });
+    const firstStored = store.get(first.license_id);
+    const secondStored = store.get(second.license_id);
+    assertVerifierRecord(firstStored);
+    assertVerifierRecord(secondStored);
+    assert.notEqual(
+      firstStored.license_secret_verifier.salt,
+      secondStored.license_secret_verifier.salt,
+    );
+    assert.notEqual(
+      firstStored.license_secret_verifier.derived_key,
+      secondStored.license_secret_verifier.derived_key,
+    );
+    const disk = recordJsonFiles(dataDir)
+      .map((file) => fs.readFileSync(file, 'utf8'))
+      .join('');
+    assert.doesNotMatch(disk, new RegExp(secret.trim()));
+    assert.equal(store.getByKey(secret, first.domain).license_id, first.license_id);
+    assert.equal(store.getByKey(secret.trim(), first.domain), null);
+  } finally {
+    fs.rmSync(dataDir, { recursive: true, force: true });
+  }
+});
+
+test('legacy plaintext secret migrates only after success and concurrent lock leaves bytes intact', () => {
+  const dataDir = makeDataDir();
+  try {
+    const store = makeStore(dataDir);
+    const secret = 'legacy exact secret';
+    const record = {
+      version: '1.0',
+      license_id: 'lic_legacy_secret',
+      license_key: secret,
+      domain: 'kdna:secret:legacy',
+      issued_to: null,
+      issued_at: '2026-07-31T00:00:00.000Z',
+      expires_at: null,
+      status: 'active',
+      revoked: false,
+      revoked_at: null,
+      revocation_reason: null,
+      require_machine_binding: false,
+      require_online_check: false,
+      offline_grace_days: 7,
+      allowed_agents: null,
+    };
+    const legacyPath = path.join(dataDir, `${record.license_id}.json`);
+    const originalBytes = `${JSON.stringify(record, null, 2)}\n`;
+    fs.writeFileSync(legacyPath, originalBytes, { mode: 0o600 });
+
+    assert.equal(store.getByKey('wrong legacy secret', record.domain), null);
+    assert.equal(fs.readFileSync(legacyPath, 'utf8'), originalBytes);
+
+    const canonicalPath = path.join(
+      dataDir,
+      `record~${encodeLicenseId(record.license_id)}.json`,
+    );
+    fs.writeFileSync(`${canonicalPath}.lock`, 'competing writer\n', { mode: 0o600 });
+    assert.throws(
+      () => store.getByKey(secret, record.domain),
+      /EEXIST|file already exists/,
+    );
+    assert.equal(fs.readFileSync(legacyPath, 'utf8'), originalBytes);
+    assert.equal(fs.existsSync(canonicalPath), false);
+    fs.rmSync(`${canonicalPath}.lock`);
+
+    const migrated = store.getByKey(secret, record.domain);
+    assert.equal(migrated.license_id, record.license_id);
+    assertVerifierRecord(migrated);
+    assert.equal(fs.existsSync(legacyPath), false);
+    const canonicalBytes = fs.readFileSync(canonicalPath, 'utf8');
+    assert.doesNotMatch(canonicalBytes, new RegExp(secret));
+    assert.equal(
+      fs.readdirSync(dataDir).some((file) => file.endsWith('.tmp') || file.endsWith('.lock')),
+      false,
+    );
+  } finally {
+    fs.rmSync(dataDir, { recursive: true, force: true });
+  }
+});
+
 test('canonical records are authoritative and never fall back after corruption', () => {
   const dataDir = makeDataDir();
   try {
@@ -646,10 +758,10 @@ test('canonical records are authoritative and never fall back after corruption',
       { mode: 0o600 },
     );
 
-    assert.equal(store.get(rec.license_id).license_key, rec.license_key);
+    assertVerifierRecord(store.get(rec.license_id));
     assert.equal(store.getByKey('synthetic-license-secret-stale', rec.domain), null);
     assert.equal(store.list().length, 1);
-    assert.equal(store.list()[0].license_key, rec.license_key);
+    assertVerifierRecord(store.list()[0]);
 
     fs.writeFileSync(
       canonicalPath,
@@ -959,7 +1071,7 @@ test('domain is one canonical Core asset identity across storage and every HTTP 
           domain: 'kdna:invalid:secret',
           license_key,
         }),
-        /non-empty string/,
+        /plaintext license_key/,
       );
     }
 
@@ -998,6 +1110,7 @@ test('license secrets stay request-only across signed records, errors, routes, a
       assert.equal(response.status, 200);
       const body = await response.json();
       assert.equal(body.license_key, undefined);
+      assert.equal(body.license_secret_verifier, undefined);
       assert.doesNotMatch(JSON.stringify(body), new RegExp(licenseSecret));
       assert.equal(verifyEntitlementSignature(body, keys.publicPem).ok, true);
     }
@@ -1219,22 +1332,30 @@ test('handler exceptions return one generic error without internal or request se
   });
 });
 
-test('CLI --create-license creates a record, --list lists it, --revoke revokes it', async () => {
+test('CLI private stdin creates a record, list stays public, and revoke works', async () => {
   const dataDir = makeDataDir();
   try {
+    const secret = ' synthetic-license-secret-cli ';
+    const request = JSON.stringify({
+      domain: 'kdna:cli:test',
+      license_key: secret,
+      issued_to: 'cli@example.com',
+      ttl_days: 30,
+    });
+    const createArgs = [CLI, '--create-license-stdin', '--data-dir', dataDir];
+    assert.equal(createArgs.some((argument) => argument.includes(secret)), false);
     const create = spawnSync(process.execPath, [CLI,
-      '--create-license',
-      '{"domain":"kdna:cli:test","license_key":"synthetic-license-secret-cli","issued_to":"cli@example.com","ttl_days":30}',
+      '--create-license-stdin',
       '--data-dir', dataDir,
-    ], { encoding: 'utf8' });
+    ], { encoding: 'utf8', input: `${request}\n` });
     assert.equal(create.status, 0, `create failed: ${create.stderr}`);
     assert.match(create.stdout, /Created license:/);
-    assert.doesNotMatch(create.stdout, /synthetic-license-secret-cli|license_key/);
+    assert.doesNotMatch(create.stdout, /synthetic-license-secret-cli|license_key|derived_key/);
 
     const list = spawnSync(process.execPath, [CLI, '--list', '--data-dir', dataDir], { encoding: 'utf8' });
     assert.equal(list.status, 0);
     assert.match(list.stdout, /kdna:cli:test/);
-    assert.doesNotMatch(list.stdout, /synthetic-license-secret-cli|license_key/);
+    assert.doesNotMatch(list.stdout, /synthetic-license-secret-cli|license_key|derived_key/);
 
     // Find the license_id from the create output
     const created = JSON.parse(create.stdout.split('Created license:\n  ')[1]);
@@ -1246,8 +1367,125 @@ test('CLI --create-license creates a record, --list lists it, --revoke revokes i
     assert.equal(revoke.status, 0, `revoke failed: ${revoke.stderr}`);
     assert.match(revoke.stdout, /Revoked:/);
     assert.match(revoke.stdout, /CLI test/);
-    assert.doesNotMatch(revoke.stdout, /synthetic-license-secret-cli|license_key/);
+    assert.doesNotMatch(revoke.stdout, /synthetic-license-secret-cli|license_key|derived_key/);
+
+    const stored = makeStore(dataDir).get(created.license_id);
+    assertVerifierRecord(stored);
+    assert.equal(makeStore(dataDir).getByKey(secret, 'kdna:cli:test').license_id, created.license_id);
+    assert.equal(makeStore(dataDir).getByKey(secret.trim(), 'kdna:cli:test'), null);
+
+    for (const unsafe of [
+      ['--create-license', request],
+      [`--create-license=${request}`],
+      ['--admin-token', secret],
+      [`--admin-token=${secret}`],
+    ]) {
+      const rejected = spawnSync(process.execPath, [CLI, ...unsafe], { encoding: 'utf8' });
+      assert.notEqual(rejected.status, 0);
+      assert.match(rejected.stderr, /not accepted in process arguments/);
+      assert.doesNotMatch(rejected.stderr, /synthetic-license-secret-cli/);
+    }
   } finally {
+    fs.rmSync(dataDir, { recursive: true, force: true });
+  }
+});
+
+test('server process reads its admin token from a private file without argv or output exposure', async () => {
+  const dataDir = makeDataDir();
+  const adminFile = path.join(dataDir, 'admin-token');
+  const secret = `admin-${crypto.randomBytes(12).toString('hex')}`;
+  fs.writeFileSync(adminFile, `${secret}\n`, { mode: 0o600 });
+  const args = [
+    CLI,
+    '--port',
+    '0',
+    '--host',
+    '127.0.0.1',
+    '--data-dir',
+    dataDir,
+    '--admin-token-file',
+    adminFile,
+  ];
+  const child = spawn(process.execPath, args, {
+    env: { ...process.env },
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  let stdout = '';
+  let stderr = '';
+  child.stdout.setEncoding('utf8');
+  child.stderr.setEncoding('utf8');
+  child.stdout.on('data', (chunk) => {
+    stdout += chunk;
+  });
+  child.stderr.on('data', (chunk) => {
+    stderr += chunk;
+  });
+
+  try {
+    const port = await new Promise((resolve, reject) => {
+      const deadline = setTimeout(
+        () => reject(new Error(`server did not start: ${stderr}`)),
+        5000,
+      );
+      const inspect = () => {
+        const match = stdout.match(/listening on http:\/\/127\.0\.0\.1:(\d+)/u);
+        if (!match) return;
+        clearTimeout(deadline);
+        resolve(Number(match[1]));
+      };
+      child.stdout.on('data', inspect);
+      child.once('exit', (code) => {
+        clearTimeout(deadline);
+        reject(new Error(`server exited before listening (${code}): ${stderr}`));
+      });
+      inspect();
+    });
+
+    const commandLine = fs.existsSync(`/proc/${child.pid}/cmdline`)
+      ? fs.readFileSync(`/proc/${child.pid}/cmdline`, 'utf8')
+      : spawnSync('ps', ['-o', 'command=', '-p', String(child.pid)], {
+          encoding: 'utf8',
+        }).stdout;
+    assert.doesNotMatch(commandLine, new RegExp(secret));
+    assert.equal(args.some((argument) => argument.includes(secret)), false);
+    assert.doesNotMatch(stdout, new RegExp(secret));
+    assert.doesNotMatch(stderr, new RegExp(secret));
+
+    const body = JSON.stringify({
+      license_id: 'lic_missing',
+      domain: 'kdna:missing:license',
+      reason: 'test',
+    });
+    const accepted = await fetch(`http://127.0.0.1:${port}/entitlements/revoke`, {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${secret}`,
+        'content-type': 'application/json',
+      },
+      body,
+    });
+    assert.equal(accepted.status, 404);
+    assert.doesNotMatch(await accepted.text(), new RegExp(secret));
+
+    const rejected = await fetch(`http://127.0.0.1:${port}/entitlements/revoke`, {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${secret}-wrong`,
+        'content-type': 'application/json',
+      },
+      body,
+    });
+    assert.equal(rejected.status, 401);
+    assert.doesNotMatch(await rejected.text(), new RegExp(secret));
+  } finally {
+    if (child.exitCode === null) child.kill('SIGTERM');
+    await new Promise((resolve) => {
+      if (child.exitCode !== null) return resolve();
+      child.once('exit', resolve);
+      setTimeout(() => {
+        if (child.exitCode === null) child.kill('SIGKILL');
+      }, 2000).unref();
+    });
     fs.rmSync(dataDir, { recursive: true, force: true });
   }
 });
