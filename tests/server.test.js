@@ -1,5 +1,5 @@
 /**
- * server.test.js — kdna-activation-server tests (Story 24)
+ * server.test.js — kdna-activation-server tests
  *
  * Covers:
  *   1. /healthz returns 200
@@ -124,7 +124,7 @@ function rawHttp(port, request) {
   });
 }
 
-test('Story 24: /healthz returns 200 with server metadata', async () => {
+test('/healthz returns 200 with server metadata', async () => {
   await withServer({}, async (ctx) => {
     const res = await httpJson(ctx, 'GET', '/healthz');
     assert.equal(res.status, 200);
@@ -135,7 +135,7 @@ test('Story 24: /healthz returns 200 with server metadata', async () => {
   });
 });
 
-test('Story 24: /server/identity returns the server public key', async () => {
+test('/server/identity returns the server public key', async () => {
   await withServer({}, async (ctx) => {
     const res = await httpJson(ctx, 'GET', '/server/identity');
     assert.equal(res.status, 200);
@@ -147,7 +147,7 @@ test('Story 24: /server/identity returns the server public key', async () => {
   });
 });
 
-test('Story 24: /entitlements/activate returns a signed record for valid key', async () => {
+test('/entitlements/activate returns a signed record for valid key', async () => {
   await withServer({}, async (ctx, dataDir, store) => {
     store.create({ domain: 'kdna:x:y', license_key: 'synthetic-license-secret-test' });
     const res = await httpJson(ctx, 'POST', '/entitlements/activate', {
@@ -166,7 +166,7 @@ test('Story 24: /entitlements/activate returns a signed record for valid key', a
   });
 });
 
-test('Story 24: /activate rejects an unknown license_key with INVALID_LICENSE_KEY', async () => {
+test('/activate rejects an unknown license_key with INVALID_LICENSE_KEY', async () => {
   await withServer({}, async (ctx) => {
     const res = await httpJson(ctx, 'POST', '/entitlements/activate', {
       domain: 'kdna:x:y',
@@ -178,7 +178,7 @@ test('Story 24: /activate rejects an unknown license_key with INVALID_LICENSE_KE
   });
 });
 
-test('Story 24: /activate rejects a license_key that does not match the domain', async () => {
+test('/activate rejects a license_key that does not match the domain', async () => {
   await withServer({}, async (ctx, dataDir, store) => {
     const rec = store.create({ domain: 'kdna:x:y', license_key: 'synthetic-license-secret-test' });
     const res = await httpJson(ctx, 'POST', '/entitlements/activate', {
@@ -193,7 +193,7 @@ test('Story 24: /activate rejects a license_key that does not match the domain',
   });
 });
 
-test('Story 24: /sync refreshes last_checked_at and returns a signed record', async () => {
+test('/sync refreshes last_checked_at and returns a signed record', async () => {
   await withServer({}, async (ctx, dataDir, store) => {
     store.create({ domain: 'kdna:x:y', license_key: 'synthetic-license-secret-test' });
     const activate = await httpJson(ctx, 'POST', '/entitlements/activate', {
@@ -215,7 +215,7 @@ test('Story 24: /sync refreshes last_checked_at and returns a signed record', as
   });
 });
 
-test('Story 24: /activate and /sync reject expired licenses', async () => {
+test('/activate and /sync reject expired licenses', async () => {
   await withServer({}, async (ctx, dataDir, store) => {
     const expired = store.create({
       domain: 'kdna:x:y',
@@ -245,7 +245,7 @@ test('Story 24: /activate and /sync reject expired licenses', async () => {
   });
 });
 
-test('Story 24: /revoke without admin token returns 401 UNAUTHORIZED', async () => {
+test('/revoke without admin token returns 401 UNAUTHORIZED', async () => {
   await withServer({ adminToken: 'secret-admin-token' }, async (ctx, dataDir, store) => {
     store.create({ domain: 'kdna:x:y', license_key: 'synthetic-license-secret-test' });
     const res = await httpJson(ctx, 'POST', '/entitlements/revoke', {
@@ -255,7 +255,7 @@ test('Story 24: /revoke without admin token returns 401 UNAUTHORIZED', async () 
   });
 });
 
-test('Story 24: /revoke with admin token marks license as revoked; activate returns 403', async () => {
+test('/revoke with admin token marks license as revoked; activate returns 403', async () => {
   await withServer({ adminToken: 'secret-admin-token' }, async (ctx, dataDir, store) => {
     const rec = store.create({ domain: 'kdna:x:y', license_key: 'synthetic-license-secret-test' });
     // Revoke
@@ -276,7 +276,7 @@ test('Story 24: /revoke with admin token marks license as revoked; activate retu
   });
 });
 
-test('Story 24: /entitlements/status returns public metadata without license_key', async () => {
+test('/entitlements/status returns public metadata without license_key', async () => {
   await withServer({}, async (ctx, dataDir, store) => {
     const rec = store.create({ domain: 'kdna:x:y', license_key: 'synthetic-license-secret-test' });
     const activate = await httpJson(ctx, 'POST', '/entitlements/activate', {
@@ -815,7 +815,7 @@ test('the keyed machine binding survives a clean server restart', async () => {
   }
 });
 
-test('Story 24: signed records verify against the server public key (Ed25519 round-trip)', async () => {
+test('signed records verify against the server public key (Ed25519 round-trip)', async () => {
   await withServer({}, async (ctx, dataDir, store, keys) => {
     store.create({ domain: 'kdna:x:y', license_key: 'synthetic-license-secret-test' });
     const res = await httpJson(ctx, 'POST', '/entitlements/activate', {
@@ -831,7 +831,7 @@ test('Story 24: signed records verify against the server public key (Ed25519 rou
   });
 });
 
-test('Story 24: server does not make outbound network calls (no KDNA Inc. URL hardcoded)', async () => {
+test('server does not make outbound network calls (no KDNA Inc. URL hardcoded)', async () => {
   // We can't easily prove a negative, but we can prove that the
   // server's source code contains no outbound URLs and the test
   // passes with no DNS / network access.
@@ -1219,7 +1219,7 @@ test('handler exceptions return one generic error without internal or request se
   });
 });
 
-test('Story 24: CLI --create-license creates a record, --list lists it, --revoke revokes it', async () => {
+test('CLI --create-license creates a record, --list lists it, --revoke revokes it', async () => {
   const dataDir = makeDataDir();
   try {
     const create = spawnSync(process.execPath, [CLI,

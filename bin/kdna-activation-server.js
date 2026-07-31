@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * kdna-activation-server — CLI entry (Story 24)
+ * kdna-activation-server — CLI entry
  *
  * Self-hostable HTTP activation server. See README.md for
  * self-hosting instructions.

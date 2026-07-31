@@ -1,5 +1,5 @@
 /**
- * server.js — activation server HTTP layer (Story 24)
+ * server.js — activation server HTTP layer
  *
  * Implements the four endpoints from specs/kdna-entitlement-api.md:
  *
