@@ -113,7 +113,7 @@ test('release event and exact Core dependency fail closed', () => {
   assert.doesNotThrow(() => verifyRuntimeDependency(PACKAGE_JSON, PACKAGE_LOCK));
   assert.throws(
     () => verifyRuntimeDependency(
-      { ...PACKAGE_JSON, dependencies: { '@aikdna/kdna-core': '^0.20.0' } },
+      { ...PACKAGE_JSON, dependencies: { '@aikdna/kdna-core': '^0.21.0' } },
       PACKAGE_LOCK,
     ),
     /exact @aikdna\/kdna-core/,
