@@ -77,16 +77,16 @@ function verifyReleaseEvent({ action, isDraft, isPrerelease }) {
 
 function verifyRuntimeDependency(packageJson, packageLock) {
   assert(
-    packageJson?.dependencies?.['@aikdna/kdna-core'] === '0.20.0',
-    'Activation must bind exact @aikdna/kdna-core@0.20.0',
+    packageJson?.dependencies?.['@aikdna/kdna-core'] === '0.21.0',
+    'Activation must bind exact @aikdna/kdna-core@0.21.0',
   );
   assert(
-    packageLock?.packages?.['']?.dependencies?.['@aikdna/kdna-core'] === '0.20.0',
-    'package lock must bind exact @aikdna/kdna-core@0.20.0',
+    packageLock?.packages?.['']?.dependencies?.['@aikdna/kdna-core'] === '0.21.0',
+    'package lock must bind exact @aikdna/kdna-core@0.21.0',
   );
   assert(
-    packageLock?.packages?.['node_modules/@aikdna/kdna-core']?.version === '0.20.0',
-    'installed lock entry must resolve @aikdna/kdna-core@0.20.0',
+    packageLock?.packages?.['node_modules/@aikdna/kdna-core']?.version === '0.21.0',
+    'installed lock entry must resolve @aikdna/kdna-core@0.21.0',
   );
 }
 

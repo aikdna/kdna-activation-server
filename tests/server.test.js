@@ -59,8 +59,8 @@ const MACHINE_A = 'a'.repeat(64);
 const MACHINE_B = 'b'.repeat(64);
 const MAX_REQUEST_BODY_BYTES = 64 * 1024;
 
-test('public entitlement contract is bound to the Core 0.20 manifest asset identity', () => {
-  assert.equal(CORE_CONFORMANCE_VERSION, '0.20.0');
+test('public entitlement contract is bound to the Core 0.21 manifest asset identity', () => {
+  assert.equal(CORE_CONFORMANCE_VERSION, '0.21.0');
   assert.equal(corePackage.version, CORE_CONFORMANCE_VERSION);
   assert.equal(ASSET_ID_RE.source, coreManifestSchema.properties.asset_id.pattern);
   assert.equal(

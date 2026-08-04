@@ -11,7 +11,7 @@
 const corePackage = require('@aikdna/kdna-core/package.json');
 const manifestSchema = require('@aikdna/kdna-core/schema/manifest.schema.json');
 
-const CORE_CONFORMANCE_VERSION = '0.20.0';
+const CORE_CONFORMANCE_VERSION = '0.21.0';
 const ENTITLEMENT_ROUTES = Object.freeze({
   health: '/healthz',
   identity: '/server/identity',
