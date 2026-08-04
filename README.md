@@ -28,7 +28,7 @@ The responsibility routes documented below are the only public HTTP contract.
 In particular, Remote 0.4.1 and later send entitlement refreshes to
 `/entitlements/sync`; deploy Activation 0.2.0 before Remote 0.4.1 or later.
 The server validates every entitlement `domain` against the authoritative
-`asset_id` grammar shipped by KDNA Core 0.20.0.
+`asset_id` grammar shipped by KDNA Core 0.21.0.
 
 [1]: https://github.com/aikdna/kdna/blob/main/specs/kdna-entitlement-api.md
 [2]: https://github.com/aikdna/kdna/blob/main/docs/REMOTE_MODE.md
@@ -132,7 +132,7 @@ contain `license_key`; clients only send that secret in activation and sync
 request bodies.
 
 `domain` is the entitlement contract field for the Core manifest `asset_id`.
-Its value must satisfy the canonical asset identity grammar from Core 0.20.0's
+Its value must satisfy the canonical asset identity grammar from Core 0.21.0's
 published `manifest.schema.json`. No alternate package-name syntax is accepted
 as a second identity format.
 
