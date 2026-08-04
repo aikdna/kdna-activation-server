@@ -2,6 +2,8 @@
 
 ## 0.2.1
 
+- Bind the entitlement `domain` grammar and runtime dependency to the
+  published `@aikdna/kdna-core@0.21.0` (core migration from 0.20.0).
 - Read license-creation and administrator secrets only from bounded strict
   UTF-8 stdin or a private regular file; raw secret-bearing argv forms fail
   closed.
