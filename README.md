@@ -10,10 +10,10 @@ This package implements the legacy license-key and signed-receipt profile. It
 is not an RFC-0019 account/device external-key-grant issuer. Implementations
 must not present one profile as the other.
 
-The registry package at `0.2.0` is the published baseline. Repository
-`0.2.1` is an unreleased source candidate containing the secret-input and
-verifier-at-rest corrections below; it is not npm latest and a checkout is not
-evidence of publication.
+The registry package at `0.2.1` is the published baseline and npm latest
+(published 2026-08-09), containing the secret-input and verifier-at-rest
+corrections below. The published artifact, not a source checkout, is the
+compatibility coordinate.
 
 This server answers one question:
 
