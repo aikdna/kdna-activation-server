@@ -52,7 +52,7 @@ stored locally.
 ## Quick start (self-hosting)
 
 ```bash
-# 1. Start from a trusted exact 0.2.1 source checkout on Node 18+.
+# 1. Start from a trusted exact 0.2.1 source checkout on Node 22+.
 npm ci
 npm test
 npm pack

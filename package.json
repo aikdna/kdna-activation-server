@@ -24,7 +24,7 @@
     "prepublishOnly": "npm test"
   },
   "engines": {
-    "node": ">=18"
+    "node": ">=22"
   },
   "dependencies": {
     "@aikdna/kdna-core": "0.21.0"
