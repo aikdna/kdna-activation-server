@@ -16,5 +16,8 @@ jobs:
         with:
           node-version: ${{ matrix.node }}
           check-latest: false
-      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: npm ci --offline --ignore-scripts --omit=optional --no-audit --no-fund
       - run: npm test
+      - run: npm run lint
+      - run: npm run check:public-surface
+      - run: npm pack --ignore-scripts --dry-run --json

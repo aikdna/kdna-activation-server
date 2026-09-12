@@ -1,0 +1,48 @@
+{
+  "schema": "kdna.public-contract-binding/1",
+  "package": "@aikdna/kdna-activation-server",
+  "version": "0.4.0-rc.component-semantics.1",
+  "packages": {
+    "@aikdna/kdna-core": "0.24.0-rc.component-semantics.2",
+    "@aikdna/kdna-read": "0.3.0-rc.component-semantics.2",
+    "@aikdna/kdna-web-server": "0.5.0-rc.component-semantics.1"
+  },
+  "component_definition_digest": "sha256:3087cd19542e72322aec19b3015c916d2cfb074fa42e3fd76b3756bb4f097de3",
+  "component_kinds": [
+    "taxonomy",
+    "candidate-set",
+    "discriminator-set"
+  ],
+  "runtime_semantics": "Only current public Core/Read/Host interprets component meaning; this adapter forwards current public response without independent interpretation or action authority.",
+  "proof_limits": [
+    "Server-owned asset and exact current scope required",
+    "No portable entitlement credential, machine identity, independent remote revocation or action authorization claim",
+    "Co-located bearer/store observer only"
+  ],
+  "artifacts": {
+    "@aikdna/kdna-core": {
+      "version": "0.24.0-rc.component-semantics.2",
+      "filename": "aikdna-kdna-core-0.24.0-rc.component-semantics.2.tgz",
+      "bytes": 235986,
+      "sha256": "a9cb3f08735b00657e4848766f0ac517abdcb256121a841f01e662525a0858ea"
+    },
+    "@aikdna/kdna-read": {
+      "version": "0.3.0-rc.component-semantics.2",
+      "filename": "aikdna-kdna-read-0.3.0-rc.component-semantics.2.tgz",
+      "bytes": 100934,
+      "sha256": "43d0f12a1a63a88d26570bfff821919a5cd478fdbd0568bd9c819bc56078b0f0"
+    },
+    "@aikdna/kdna-web-server": {
+      "version": "0.5.0-rc.component-semantics.1",
+      "filename": "aikdna-kdna-web-server-0.5.0-rc.component-semantics.1.tgz",
+      "bytes": 27782,
+      "sha256": "4057a84b76d173470c59f95dc0e73af81aa21d36876f6daf4226c1ceaefc7551"
+    }
+  },
+  "integration_remote_artifact": {
+    "version": "0.6.0-rc.component-semantics.1",
+    "filename": "aikdna-kdna-remote-server-0.6.0-rc.component-semantics.1.tgz",
+    "bytes": 14192,
+    "sha256": "f50a2e48db7016c9059c6b2e472903f77d2fc51b67d0f354a609f72037b5c413"
+  }
+}

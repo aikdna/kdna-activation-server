@@ -1,282 +1,59 @@
-# @aikdna/kdna-activation-server
+# KDNA Activation current-store observer
 
-**Experimental self-hostable HTTP activation server for KDNA `licensed` assets.**
+`@aikdna/kdna-activation-server@0.4.0-rc.component-semantics.1` is a co-located reference authorization observer for the public KDNA reference Host. It observes an authoritative entitlement store before disclosure and maps that observation to the existing HostPolicy. This release candidate has no standalone HTTP server or CLI, portable credential, issuer-signature claim, account/device identity, or action grant.
 
-KDNA makes judgment portable across models and runtimes. This repository is an
-experimental entitlement reference implementation, not a marketplace, billing
-service, or AIKDNA-hosted activation platform.
+## Exact supported boundary
 
-This package implements the legacy license-key and signed-receipt profile. It
-is not an RFC-0019 account/device external-key-grant issuer. Implementations
-must not present one profile as the other.
+The trusted deployment supplies one `licenseId`, one supported historical `legacyDomain`, a genuine Core-admitted `snapshot`, an explicit nonempty IR-node `scope`, and `epoch` / `policyId`. It supplies `readBinding()` to obtain that mapping again at every check. A difference in license, domain, admitted asset ID/version/A/C/E, scope, epoch or policy ID closes this observer. The legacy domain grammar is an explicitly named historical Activation subset, not a replacement for Core's current Identifier grammar.
 
-The registry package at `0.2.1` is the published baseline and npm latest
-(published 2026-08-09), containing the secret-input and verifier-at-rest
-corrections below. The published artifact, not a source checkout, is the
-compatibility coordinate.
+The current record must match the exact configured license and domain, contain the existing bounded scrypt verifier, and have canonical UTC millisecond ISO `issued_at`, `updated_at`, and `expires_at`. It must satisfy `issued_at <= updated_at <= now < expires_at`, with no observed update rollback. Only `status: "active"`, `revoked: false`, `revoked_at: null`, `revocation_reason: null`, `require_machine_binding: false`, `require_online_check: true`, and `allowed_agents: null` are supported. Missing/unknown values, perpetual expiry, unsupported device/agent restrictions and plaintext legacy secrets are refused. When machine binding is explicitly disabled, legacy machine digest/fingerprint metadata is ignored and supplies no device authority. The observer never scans by secret, migrates records, or writes an offline lease.
 
-This server answers one question:
+`authenticate(secret)` performs real current secret verification and returns an opaque process-local object or `null`. `verifyContext(context)` and `observePolicy({ context, snapshot })` repeat current store, binding and clock checks. The Host supplies the public snapshot view to `observePolicy`. A copied JSON context has no authority. Possession of this context proves only the supplied bearer matched the configured current record; it does not prove who owns that bearer. Store/configuration failure, timeout, invalid/future timestamps, clock rollback, revocation, secret rotation, identity mismatch or mapping change clears contexts and closes the observer. Recreating the observer requires fresh server-owned configuration; the existing Host denial latch must also remain intact.
 
-> Is this user / device / organisation currently entitled to use this
-> asset?
+## Embedding
 
-It implements the four endpoints in
-[`specs/kdna-entitlement-api.md`][1] and the self-hosting invariant
-from [`docs/REMOTE_MODE.md`][2].
+Use `createActivationObserver`, `makeStore`, `createLicenseSecretVerifier` and `verifyLicenseSecret` from the package root. Runtime Core is exactly `0.24.0-rc.component-semantics.2`; the Host interface is exactly `0.5.0-rc.component-semantics.1`. The reference HTTP tests consume Remote `0.6.0-rc.component-semantics.1` and Read `0.3.0-rc.component-semantics.2` through public exports.
 
-The responsibility routes documented below are the only public HTTP contract.
-In particular, Remote 0.4.1 and later send entitlement refreshes to
-`/entitlements/sync`; deploy Activation 0.2.0 before Remote 0.4.1 or later.
-The server validates every entitlement `domain` against the authoritative
-`asset_id` grammar shipped by KDNA Core 0.21.0.
+```js
+const { createActivationObserver, makeStore } = require('@aikdna/kdna-activation-server');
+// These values belong to the trusted deployment, never to a request body.
+const observer = createActivationObserver({
+  store: makeStore(deployment.dataDirectory), // explicit absolute private directory
+  binding: deployment.currentBinding,
+  readBinding: deployment.readCurrentBinding,
+  clock: deployment.trustedClock,
+});
+// In the trusted Remote embedding:
+// resolveContext: request => observer.authenticate(readBoundedBearer(request))
+// verifyContext: observer.verifyContext
+// observePolicy: observer.observePolicy
+// On shutdown: remoteHandler.dispose(); observer.dispose();
+```
 
-[1]: https://github.com/aikdna/kdna/blob/main/specs/kdna-entitlement-api.md
-[2]: https://github.com/aikdna/kdna/blob/main/docs/REMOTE_MODE.md
+Do not log bearer values, returned records, verifier fields or internal contexts. The store's administration methods remain server-only; older machine-binding/signing/server files are historical repository material and excluded from the package. `makeStore` no longer chooses a home-directory fallback. Server data-directory permissions and deployment store/configuration integrity remain the operator's responsibility.
 
----
+Limits are positive safe integers: `timeoutMs` defaults to 1000 (maximum 30000), `contextTtlMs` to 30000 (maximum 300000), and `maxContexts` to 16 (maximum 1024). Context expiry never exceeds record expiry. A full registry refuses new contexts and retains existing unexpired contexts. Store/config callbacks are deadline-bounded on return and asynchronous waits time out. JavaScript cannot forcibly interrupt synchronous disk I/O/scrypt or a non-cooperative callback; timed-out observers remain closed even if that operation later completes. Disposal drops retained bearer references; JavaScript strings cannot be reliably zeroed.
 
-## Self-hosting is the default
+## Proof and delivery limits
 
-> The KDNA protocol MUST NOT assume a single official KDNA
-> server. Any asset creator can run their own activation server.
-> No AIKDNA-hosted activation service is part of the current public baseline.
+This boundary trusts a current co-located authoritative store and trusted clock. It introduces no cryptography and proves no cross-host/store-replica freshness, issuer identity, network replay resistance or portable signature coverage. An unobserved malicious rollback of the authoritative source cannot be detected as such. The remote consumer retains `origin: remote`, `NOT_PROVEN` remote identity/authorization/revocation and all local capabilities false. HTTP 200 does not substitute for formal Read admission, request correlation, budget accounting or Host delivery checks.
 
-This server is the deployer's own. The protocol does not
-hardcode any KDNA Inc. URL. The admin token is deployer-
-controlled. License records are deployer-controlled. The
-server's signing keypair is generated on first start and
-stored locally.
+Host rechecks policy through its existing preparation and delivery lifecycle. If the store changes after bytes enter the actual HTTP sink, local post-delivery checks can close the session and withhold retained handles, but cannot recall bytes already sent or prove client receipt. A new request always rechecks current state.
 
----
+## Development
 
-## Quick start (self-hosting)
+The repository preserves the old source/tests and changelog as history. Current commands explicitly select current tests; old CLI execution refuses, and the old server/signing modules are not public exports or tar members. `vendor/provenance.json` records exact development tar hashes and repack provenance; local repacks are not asserted to be original registry tarballs.
 
-```bash
-# 1. Start from a trusted exact 0.2.1 source checkout on Node 22+.
-npm ci
+```
+npm ci --offline --ignore-scripts --omit=optional --no-audit --no-fund
 npm test
-npm pack
-npm install -g ./aikdna-kdna-activation-server-0.2.1.tgz
-
-# 2. Create private input files without placing secrets in shell arguments.
-install -m 600 /dev/null ./license-request.json
-${EDITOR:?Set EDITOR} ./license-request.json
-kdna-activation-server --create-license-file ./license-request.json
-rm ./license-request.json
-
-install -m 600 /dev/null ./admin-token
-${EDITOR:?Set EDITOR} ./admin-token
-
-# 3. Start the server. The token file must remain private.
-kdna-activation-server --port 3001 --admin-token-file ./admin-token
-
-# 4. Test. Create the request body with a private editor, not inline argv.
-curl http://localhost:3001/healthz
-install -m 600 /dev/null ./activation-request.json
-${EDITOR:?Set EDITOR} ./activation-request.json
-curl -X POST http://localhost:3001/entitlements/activate \
-  -H 'Content-Type: application/json' \
-  --data-binary @./activation-request.json
-rm ./activation-request.json
+npm run lint
+npm run check:public-surface
+npm pack --ignore-scripts --json
 ```
 
-That's it. No registration, no phone-home, no KDNA Inc. URL.
-Do not replace a placeholder with a real secret inside a command argument.
-`--create-license-stdin` and `--admin-token-stdin` are available when a
-deployer's secret provider can pipe bounded strict UTF-8 directly.
-The CLI rejects unknown options, unexpected positional values, duplicate
-options, cross-mode combinations, and values attached to boolean stdin flags;
-these errors never echo the rejected token.
+`npm test` uses a temporary private store directory (or an explicit absolute `KDNA_TEST_DIR`), synthetic secrets and localhost OS-assigned ports, then closes its own connections. Publishing is explicitly blocked pending a separate release decision. This repository contains a reference candidate, not a production identity deployment.
 
----
+## Current component graph
 
-## HTTP API
-
-### `GET /healthz`
-
-Health check. Returns 200 with server metadata.
-
-### `GET /server/identity`
-
-Returns the server's Ed25519 public key (PEM, hex, and
-fingerprint). Clients use this to verify that an entitlement
-record was really signed by this server.
-
-### `POST /entitlements/activate`
-
-Activates a license. Returns a signed entitlement record
-(cryptographically verifiable against `/server/identity`).
-
-Request body:
-
-```json
-{
-  "domain": "kdna:yourname:your-asset",
-  "license_key": "<license-secret>",
-  "machine_fingerprint": "<sha256>"
-}
-```
-
-Optional: `client`, `client_version`, `agent`, `account_id`,
-`device_label`.
-
-`machine_fingerprint` is required when the license was created with
-`require_machine_binding: true` (the default). Its canonical wire format is
-exactly 64 lowercase hexadecimal characters: the SHA-256 digest produced by
-the client. Uppercase, prefixed, whitespace-padded, non-ASCII, short, and long
-forms are rejected rather than normalized into aliases.
-
-Response (200): the signed entitlement record (see
-`specs/kdna-entitlement-api.md` §5). The response and its signed body never
-contain `license_key`; clients only send that secret in activation and sync
-request bodies.
-
-`domain` is the entitlement contract field for the Core manifest `asset_id`.
-Its value must satisfy the canonical asset identity grammar from Core 0.21.0's
-published `manifest.schema.json`. No alternate package-name syntax is accepted
-as a second identity format.
-
-Errors:
-- `INVALID_LICENSE_KEY` (404) — key does not match the domain
-- `LICENSE_REVOKED` (403) — license has been revoked
-- `LICENSE_EXPIRED` (403) — `expires_at` is in the past
-- `MISSING_MACHINE_FINGERPRINT` (400) — a bound license omitted its fingerprint
-- `INVALID_MACHINE_FINGERPRINT` (400) — the fingerprint is not canonical
-- `MACHINE_MISMATCH` (403) — the license is bound to another machine or has
-  not yet been activated on this machine
-
-### `POST /entitlements/sync`
-
-Refreshes the entitlement state (updates `last_checked_at` and
-`offline_valid_until`). `domain` and `license_key` are required;
-`license_id` is optional but, when present, must identify that same license.
-Machine-bound licenses must already have been activated and must send the same
-canonical `machine_fingerprint`. Returns the signed record. Same errors as
-`/activate`.
-
-### `POST /entitlements/revoke` (admin)
-
-Revokes a license. Requires an `Authorization: Bearer
-<admin-token>` header. The admin token is set at server
-startup.
-
-Request body:
-
-```json
-{
-  "license_id": "lic_abc123",
-  "domain": "kdna:yourname:your-asset",
-  "reason": "payment_failed",
-  "revoked_by": "billing-system"
-}
-```
-
-### `GET /entitlements/status?domain=...&license_id=...&machine_fingerprint=...`
-
-Introspection. Returns public entitlement metadata (unsigned,
-for introspection only) and does not include `license_key`.
-Both the canonical scoped `domain` and `license_id` are required. The status
-endpoint rejects `license_key` entirely so the secret cannot appear in URLs or
-access logs; use `/activate` or `/sync` for signed entitlement records.
-For machine-bound licenses, status requires the already-bound canonical
-fingerprint and never creates a first binding. Error responses do not include
-license metadata, the submitted fingerprint, or the stored binding digest.
-Missing, malformed, mismatched, and not-yet-bound machine authorization all
-return the same `NOT_FOUND` response as an unknown record, so public
-`license_id` values cannot be used as a binding-enumeration oracle.
-
----
-
-## CLI
-
-```bash
-# Create a license (one-shot) from a private request body
-kdna-activation-server --create-license-stdin < ./license-request.json
-# or: kdna-activation-server --create-license-file ./license-request.json
-
-# List all licenses
-kdna-activation-server --list
-
-# Revoke
-kdna-activation-server --revoke lic_abc123 --reason "payment_failed"
-
-# Start the server with one private token source
-kdna-activation-server --port 3001 --admin-token-file ./admin-token
-# or: kdna-activation-server --port 3001 --admin-token-stdin
-```
-
-The server keypair is auto-generated on first start and
-stored at `~/.kdna/activation-server/`. The private key is
-mode 0600.
-
----
-
-## Security properties
-
-- **No KDNA Inc. URL is hardcoded.** The server has zero
-  outbound network calls during normal operation.
-- **The server keypair is local.** The private key never
-  leaves the deployer's machine.
-- **The admin token is deployer-controlled.** Set it at
-  startup through bounded strict UTF-8 stdin or a private regular file, or omit
-  it to disable `/revoke` over HTTP. Raw `--admin-token` argv is rejected.
-- **The license_key is a request secret.** It is accepted only in activation
-  and sync JSON request bodies. The server does not return it in signed
-  records, status responses, errors, or command output. Clients should not
-  place it in URLs, argv, or logs. License creation reads private JSON through
-  stdin or a private file; raw `--create-license` argv is rejected.
-- **License secrets are verifier-only at rest.** New records store an
-  independently salted, bounded-parameter scrypt verifier, never the plaintext
-  `license_key`. Verification is constant-time. A legacy plaintext record is
-  atomically rewritten only after the caller supplies the exact old secret;
-  failed verification or concurrent drift leaves the original bytes intact.
-  Salt and verifier bytes are server-only and are not usable as a license key.
-- **Records are signed.** Every `/activate` and `/sync`
-  response is signed with the server's Ed25519 key. Clients
-  can verify against `/server/identity`.
-- **Raw machine fingerprints are not stored by new activations.** The server
-  derives a purpose-separated HMAC key from its local private key and stores
-  only the keyed binding digest. A matching request migrates an older raw
-  fingerprint record in place; malformed legacy bindings fail closed.
-- **License record filenames are collision-free.** Each validated license
-  identifier has one encoded storage path. Exact legacy records migrate on
-  write, while a different identifier that shared an older sanitized filename
-  is never treated as an alias. Directory scans only discover identifiers;
-  activation, listing, and key lookup always re-read the authoritative path.
-- **HTTP routing is origin-form only.** Requests require one syntactically
-  valid `Host` header, while route selection uses a fixed internal base rather
-  than the supplied host. Absolute request targets and Host values containing
-  credentials, paths, queries, or fragments are rejected.
-- **JSON bodies are byte-bounded and strictly decoded.** Activation, sync, and
-  revocation accept at most 64 KiB of UTF-8 bytes. Oversized, malformed UTF-8,
-  and malformed JSON inputs receive stable errors without parser details.
-
----
-
-## Local development
-
-```bash
-git clone https://github.com/aikdna/kdna-activation-server
-cd kdna-activation-server
-npm test
-```
-
-The tests spin up the server on an OS-assigned port. No
-external services are required.
-
----
-
-
-## Official packages
-
-Official KDNA packages are published under the `@aikdna` npm scope and the
-`aikdna` name on PyPI. The unscoped npm package `kdna` is not affiliated with
-the KDNA project. Install only from the official coordinates shown in this
-README.
-
-## License
-
-Apache 2.0. See [LICENSE](./LICENSE).
-
-This server is a license-management reference implementation.
-Trust is the consumer's decision, not the server's claim.
+This candidate binds the current public Core, Read and reference Host. Taxonomy, candidate-set and discriminator-set content is carried in the public Read projection; this package adds no component interpreter or action permission. Exact versions, artifact hashes and scope limits are recorded in `public-contract-binding.json`.
