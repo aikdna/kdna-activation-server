@@ -1,29 +1,7 @@
-/**
- * store.js — entitlement record storage
- *
- * Per docs/REMOTE_MODE.md and specs/kdna-entitlement-api.md,
- * the activation server stores entitlement records. The design
- * contract calls for SQLite ("zero external dependencies for the
- * simplest deployment path"). The 0.1.0 implementation uses a
- * single JSON file (one file per license_id) for the simplest
- * deployment path. A future version can swap in SQLite without
- * changing the public API.
- *
- * Each record has the shape documented in
- * specs/kdna-entitlement-api.md §10 (Local Activation File).
- * The activation server signs a public projection of this shape on /activate
- * and /sync. Request secrets and server-only binding digests remain internal.
- *
- * The store is the SOURCE OF TRUTH for entitlement state. The
- * CLI's local copy at ~/.kdna/licenses/<domain>.json is a
- * CLIENT cache, not the source of truth. If a client claims
- * "active" but the server says "revoked", the server wins.
- * Machine-bound server records persist a purpose-separated keyed digest in
- * `machine_binding_digest`; raw `machine_fingerprint` values are accepted only
- * as legacy migration input and are removed after an exact successful match.
- * License request secrets are persisted only as bounded scrypt verifiers.
- * Legacy plaintext records migrate atomically only after the supplied secret
- * succeeds; failed verification leaves the original bytes untouched.
+/** Existing private JSON entitlement store and scrypt verifier.
+ * Current public entry requires an explicit absolute private data directory.
+ * The current observer only calls exact get(); legacy administration and
+ * migration methods remain server-only and are never transport authority.
  */
 
 'use strict';
@@ -55,7 +33,9 @@ const DEFAULT_DATA_DIR = path.join(
 );
 
 function makeStore(dataDir) {
-  if (!dataDir) dataDir = DEFAULT_DATA_DIR;
+  if (typeof dataDir !== 'string' || !path.isAbsolute(dataDir)) {
+    throw new TypeError('An explicit absolute server-owned data directory is required.');
+  }
   fs.mkdirSync(dataDir, { recursive: true, mode: 0o700 });
 
   function recordPath(licenseId) {

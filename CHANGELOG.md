@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.4.0-rc.component-semantics.1
+
+- Bind the accepted current Core/Read/Host component graph and update affected public consumers.
+- Preserve server-owned identity, scope, revocation and existing authorization limits.
+
+## 0.3.0-rc.current-observer.2
+
+- Require `CreateLicenseOptions.license_key` in the public type declaration to match the existing store creation validation. Runtime behavior is unchanged.
+
+## 0.3.0-rc.current-observer.1
+
+- Add a co-located current-store observer with genuine existing scrypt verification, opaque bearer context, exact admitted asset/scope/epoch mapping and failure closure.
+- Recheck current records, expiry, revocation, configuration and trusted clock through existing public Host policy observations.
+- Bind public Core 0.23.0 and reference Host 0.4.0-rc.host-session.2; retain the explicit historical Activation domain subset without a private Core schema import.
+- Package only current named API files; retire the old CLI and preserve historical source/tests outside the package. Require an explicit absolute data directory, coherent offline lock and current test entry.
+- Preserve remote proof limits; add no issuer, account, device, cross-host freshness or action authority.
+
 ## 0.2.1
 
 - Bind the entitlement `domain` grammar and runtime dependency to the

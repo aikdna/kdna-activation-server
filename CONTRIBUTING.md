@@ -46,5 +46,9 @@ Notes on the current CLI surface (the `kdna-cli` source is authoritative):
   or PR text.
 
 The whole KDNA ecosystem is pre-release. No component — including this server,
-currently 0.2.0 — is Beta, stable, or GA. Do not describe any version line as
+currently 0.3.0-rc.current-observer.2 — is Beta, stable, or GA. Do not describe any version line as
 "the public stable line" in code, docs, or PR text.
+
+## Current observer validation
+
+Use `npm test`, `npm run lint`, `npm run check:public-surface` and `npm pack --ignore-scripts --dry-run --json` for this candidate. The current package has no CLI or HTTP server entry; historical tests are retained separately. New identity semantics or production trust deployment require a separate explicit decision.

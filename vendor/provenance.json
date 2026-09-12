@@ -1,0 +1,285 @@
+[
+  {
+    "name": "@noble/hashes",
+    "version": "1.8.0",
+    "tar": "vendor/noble-hashes-1.8.0.tgz",
+    "sha256": "2f8ce985a97936715bab16a7b3025bd73cc317831ec4d7ccaa4d136a6b04bfb5",
+    "sha512": "sha512-l5yqfa+G4+TEnAyx8QvX6ar/GmBKTFtXyH7sD1acBDvsHlvpUqYmrNifc9nUHBqno2xTGKtlm780Ey4g+JD8AQ==",
+    "bytes": 154380,
+    "provenance": "locally repacked exact retained installed third-party package, not claimed registry tar",
+    "source_package": {
+      "name": "@noble/hashes",
+      "version": "1.8.0"
+    },
+    "source_inventory": {
+      "algorithm": "SHA-256",
+      "sha256": "d2a1b719f9ce31eef1ce64232cf5f9be8a1c636c04c162bf5b6efdfd950fc69a",
+      "file_count": 247,
+      "encoding": "UTF-8 compact JSON array sorted by package-relative path, records ordered keys path,bytes,sha256; no external paths"
+    }
+  },
+  {
+    "name": "ajv",
+    "version": "8.20.0",
+    "tar": "vendor/ajv-8.20.0.tgz",
+    "sha256": "fae4b66af86b883f888c03dee309592a69c863c843c4a5c3e8ae849249a0df99",
+    "sha512": "sha512-PoeA4s5LLuxnvLBb33FOgHIrmP293WOD7XlCveSJ4jYq9KKtSrEPYq6MJ3IVl1/SGjtENLTCCRWSuKMV1ZjnjQ==",
+    "bytes": 216977,
+    "provenance": "locally repacked exact retained installed third-party package, not claimed registry tar",
+    "source_package": {
+      "name": "ajv",
+      "version": "8.20.0"
+    },
+    "source_inventory": {
+      "algorithm": "SHA-256",
+      "sha256": "3a08cc2eac970fcdc35362f8360afcc8194a739ff5ed61e71a552205c8da5da3",
+      "file_count": 466,
+      "encoding": "UTF-8 compact JSON array sorted by package-relative path, records ordered keys path,bytes,sha256; no external paths"
+    }
+  },
+  {
+    "name": "ajv-formats",
+    "version": "3.0.1",
+    "tar": "vendor/ajv-formats-3.0.1.tgz",
+    "sha256": "a249bc89a9ba8b948774b9d34d01585d4fa5b702afff4f9f6c52d51f8019893d",
+    "sha512": "sha512-6ntjgU/EpYnv9mclziLrY13Ihi9F6ub/lqdjW+sXUeNwQE+uAlv+YI+MDmP7ML4dZdEQC93/5iyA1GZ3F0vsQg==",
+    "bytes": 15840,
+    "provenance": "locally repacked exact retained installed third-party package, not claimed registry tar",
+    "source_package": {
+      "name": "ajv-formats",
+      "version": "3.0.1"
+    },
+    "source_inventory": {
+      "algorithm": "SHA-256",
+      "sha256": "d11a948d1f42b5c472e6375403758889b528b9d0c166b6bf5db5778713922a45",
+      "file_count": 15,
+      "encoding": "UTF-8 compact JSON array sorted by package-relative path, records ordered keys path,bytes,sha256; no external paths"
+    }
+  },
+  {
+    "name": "cbor-x",
+    "version": "1.6.5",
+    "tar": "vendor/cbor-x-1.6.5.tgz",
+    "sha256": "219be6b1732913143a86ccd79a44a9ea78dd2f34450845ce2109c979b918beeb",
+    "sha512": "sha512-wbTmofexrQJf8xrss5pez0r5rSeuM8bEenYnudE6FPspJugREVxqhy+huaP7RGxBn+ise/OjpnJ2E5JOaApGXQ==",
+    "bytes": 419049,
+    "provenance": "locally repacked exact retained installed third-party package, not claimed registry tar",
+    "source_package": {
+      "name": "cbor-x",
+      "version": "1.6.5"
+    },
+    "source_inventory": {
+      "algorithm": "SHA-256",
+      "sha256": "1f124da343b819534f629ea5b5b97cf02f04db10f2bef4480e2acdd3676e67cc",
+      "file_count": 31,
+      "encoding": "UTF-8 compact JSON array sorted by package-relative path, records ordered keys path,bytes,sha256; no external paths"
+    }
+  },
+  {
+    "name": "fast-deep-equal",
+    "version": "3.1.3",
+    "tar": "vendor/fast-deep-equal-3.1.3.tgz",
+    "sha256": "6d4c2b9c0b3dd6e58e0c5a4d73709e06b3aa2fbf313fedcc0a2f49ee6eb5bf79",
+    "sha512": "sha512-8516vKgodeREfw8mJcZL8D2xburm/BZZB7C80NkCaaGuI040/iqxGnr+KcZAofMFtTP3ubZgHKaTqY66L2Q9ZQ==",
+    "bytes": 3618,
+    "provenance": "locally repacked exact retained installed third-party package, not claimed registry tar",
+    "source_package": {
+      "name": "fast-deep-equal",
+      "version": "3.1.3"
+    },
+    "source_inventory": {
+      "algorithm": "SHA-256",
+      "sha256": "f8cf648acf03d975f286cb5ec7ef1558b287fb28801f9ed91634708da0cf40f8",
+      "file_count": 11,
+      "encoding": "UTF-8 compact JSON array sorted by package-relative path, records ordered keys path,bytes,sha256; no external paths"
+    }
+  },
+  {
+    "name": "fast-uri",
+    "version": "3.1.7",
+    "tar": "vendor/fast-uri-3.1.7.tgz",
+    "sha256": "75d114fa009a342a4f964e099012cfc9660cab130d8df367184e01f0d0198777",
+    "sha512": "sha512-aMDEVX6P8vorK2rM048F+QQCdtOTofaUyCFWTTCkhMJL8UdXuG2FsNAGqymKRqlsvZyxJrbG9gLaeHeBPBFjVg==",
+    "bytes": 43515,
+    "provenance": "locally repacked exact retained installed third-party package, not claimed registry tar",
+    "source_package": {
+      "name": "fast-uri",
+      "version": "3.1.7"
+    },
+    "source_inventory": {
+      "algorithm": "SHA-256",
+      "sha256": "d3401146de034f25e5975653dd93ac6273c50ea8ae2578e48dbfb913c0d064fa",
+      "file_count": 44,
+      "encoding": "UTF-8 compact JSON array sorted by package-relative path, records ordered keys path,bytes,sha256; no external paths"
+    }
+  },
+  {
+    "name": "json-schema-traverse",
+    "version": "1.0.0",
+    "tar": "vendor/json-schema-traverse-1.0.0.tgz",
+    "sha256": "57be57126b2f47e0361a83cb54d812624ce6ed8bc939984c359cdeddaa5e029b",
+    "sha512": "sha512-IakiG9hGRIsxzoMxZE9RXqc7LILkD9yfL2k6ann/bp6tPFiYOmF2/BlRFhUxUQar77FA+K5NuBv9MNFpPOcy8A==",
+    "bytes": 6027,
+    "provenance": "locally repacked exact retained installed third-party package, not claimed registry tar",
+    "source_package": {
+      "name": "json-schema-traverse",
+      "version": "1.0.0"
+    },
+    "source_inventory": {
+      "algorithm": "SHA-256",
+      "sha256": "42b07ea9bc493fe0a5fdd6bcfd20b553b0c1772ed3ec4781760a0ff175209229",
+      "file_count": 12,
+      "encoding": "UTF-8 compact JSON array sorted by package-relative path, records ordered keys path,bytes,sha256; no external paths"
+    }
+  },
+  {
+    "name": "pako",
+    "version": "2.1.0",
+    "tar": "vendor/pako-2.1.0.tgz",
+    "sha256": "49fedc8866b4abfc8e71dc7fe75ad4ef1ff1ac9601b0642cff88ee5bf2338709",
+    "sha512": "sha512-w+eufiZ1WuJYgPXbV/PO3NCMEc3xqylkKHzp8bxp1uW4qaSNQUkwmLLEc3kKsfz8lpV1F8Ht3U1Cm+9Srog2ug==",
+    "bytes": 412482,
+    "provenance": "locally repacked exact retained installed third-party package, not claimed registry tar",
+    "source_package": {
+      "name": "pako",
+      "version": "2.1.0"
+    },
+    "source_inventory": {
+      "algorithm": "SHA-256",
+      "sha256": "4a524006a3d0e0d8125f9432406884b76cdb32b11208ed4f9efca633e28e99da",
+      "file_count": 33,
+      "encoding": "UTF-8 compact JSON array sorted by package-relative path, records ordered keys path,bytes,sha256; no external paths"
+    }
+  },
+  {
+    "name": "require-from-string",
+    "version": "2.0.2",
+    "tar": "vendor/require-from-string-2.0.2.tgz",
+    "sha256": "daf9e97bbcd592f3af8ae259359536d1b9d81a697253f22fe2aeb8fcbe1c33ba",
+    "sha512": "sha512-IeaUNSnLwmvGQX/Du6dRZ0Tl3G0OPi436st7XA/5BvMhNITGt/Mu0y1ymDsq4a3ljZsnveADsOGiqp0ehYZIsw==",
+    "bytes": 1795,
+    "provenance": "locally repacked exact retained installed third-party package, not claimed registry tar",
+    "source_package": {
+      "name": "require-from-string",
+      "version": "2.0.2"
+    },
+    "source_inventory": {
+      "algorithm": "SHA-256",
+      "sha256": "04ade234b5462dc81c5bef4f46760e6e800a6d92239522e622edb5ac22536960",
+      "file_count": 4,
+      "encoding": "UTF-8 compact JSON array sorted by package-relative path, records ordered keys path,bytes,sha256; no external paths"
+    }
+  },
+  {
+    "name": "@aikdna/kdna-core",
+    "version": "0.23.0",
+    "tar": "vendor/aikdna-kdna-core-0.23.0.tgz",
+    "sha256": "b2cecb761e599d8711114d7288d6caf627b1aa01620699ecb1fca49ac3bb6ba0",
+    "sha512": "sha512-7C07+UNeph94DxeXVdZbOf7ss1a4kUqpBO6Jvws9D7QOrnKbhb5W6+UNEk+s4NRN2+Px5P3UsObGd0enC5k/UA==",
+    "bytes": 137792,
+    "provenance": "exact retained local reference candidate artifact; not claimed registry tar",
+    "source_package": {
+      "name": "@aikdna/kdna-core",
+      "version": "0.23.0"
+    },
+    "source_inventory": {
+      "algorithm": "SHA-256",
+      "sha256": "e9ad5f163d5afd1b069864f9f2c3df16c4a19a9da42b0c249ff0c00912d062e7",
+      "file_count": 35,
+      "encoding": "UTF-8 compact JSON array sorted by package-relative path, records ordered keys path,bytes,sha256; no external paths"
+    }
+  },
+  {
+    "name": "@aikdna/kdna-read",
+    "version": "0.2.0",
+    "tar": "vendor/aikdna-kdna-read-0.2.0.tgz",
+    "sha256": "1595075677dc1359c2df751ec54a706b55ffff6bfc77d117e16464fb16a5c96e",
+    "sha512": "sha512-9rPzATd7JCV+yTQl1Zg5dx60nTwmc1mE6UsSYLVCeIayt21he/Wcm1WxOVGyq9wWB39okgeFLA2qrrA/NHLOoQ==",
+    "bytes": 92522,
+    "provenance": "exact retained local reference candidate artifact; not claimed registry tar",
+    "source_package": {
+      "name": "@aikdna/kdna-read",
+      "version": "0.2.0"
+    },
+    "source_inventory": {
+      "algorithm": "SHA-256",
+      "sha256": "c60ee2a0c6257601fea03f95061358bbfdc433d91df60b1cec84e822780c4106",
+      "file_count": 36,
+      "encoding": "UTF-8 compact JSON array sorted by package-relative path, records ordered keys path,bytes,sha256; no external paths"
+    }
+  },
+  {
+    "name": "@aikdna/kdna-remote-server",
+    "version": "0.5.0-rc.public-read.2",
+    "tar": "vendor/aikdna-kdna-remote-server-0.5.0-rc.public-read.2.tgz",
+    "sha256": "4470189a407fdde8716d9c15bfdc839091b49d39047879d78ab4ce872dff293d",
+    "sha512": "sha512-PzQSlR141FlLuZoUwHEnO8/+oAfg+ZVZI149JUzd6KdzMTBTG+cB3/7zVTCUxBR4dT2Af0I1pqbP6XrjGMNv7w==",
+    "bytes": 13568,
+    "provenance": "exact retained local reference candidate artifact; not claimed registry tar",
+    "source_package": {
+      "name": "@aikdna/kdna-remote-server",
+      "version": "0.5.0-rc.public-read.2"
+    },
+    "source_inventory": {
+      "algorithm": "SHA-256",
+      "sha256": "ba4a092e7c32e95bc6fee8d2171f47f96b58ecda8c63d886c64c531e82cc5e41",
+      "file_count": 7,
+      "encoding": "UTF-8 compact JSON array sorted by package-relative path, records ordered keys path,bytes,sha256; no external paths"
+    }
+  },
+  {
+    "name": "@aikdna/kdna-web-server",
+    "version": "0.4.0-rc.host-session.2",
+    "tar": "vendor/aikdna-kdna-web-server-0.4.0-rc.host-session.2.tgz",
+    "sha256": "9264bb152ed79326d33cdc554c30bc167d2fc45c462bffea56651d9f45ed198b",
+    "sha512": "sha512-bGWlF6FaCL7Vel/oVVBTXFFjalLWOQ8ZHaOg8PFwHZVf9b9iYNZaWsKz0UJ7EkB3lAmxvTdLGz1ZjDsgi5z/xw==",
+    "bytes": 24165,
+    "provenance": "exact retained local reference candidate artifact; not claimed registry tar",
+    "source_package": {
+      "name": "@aikdna/kdna-web-server",
+      "version": "0.4.0-rc.host-session.2"
+    },
+    "source_inventory": {
+      "algorithm": "SHA-256",
+      "sha256": "d54ba5ff7578dae5f4d3e3ab21aeecec7615dec85c1e50be4c03716dae36750d",
+      "file_count": 15,
+      "encoding": "UTF-8 compact JSON array sorted by package-relative path, records ordered keys path,bytes,sha256; no external paths"
+    }
+  },
+  {
+    "name": "@aikdna/kdna-core",
+    "version": "0.24.0-rc.component-semantics.2",
+    "tar": "vendor/aikdna-kdna-core-0.24.0-rc.component-semantics.2.tgz",
+    "bytes": 235986,
+    "sha256": "a9cb3f08735b00657e4848766f0ac517abdcb256121a841f01e662525a0858ea",
+    "sha512": "sha512-GQZj2AcVaRdbWzvQ74QfSz5wfKtIG9ygUz6hx/p5b0+GtYIyRMdt8mg7JZTL7y62i7cgl7y/3faPgZLu8R4M7w==",
+    "provenance": "exact current public development artifact; no registry publication claim"
+  },
+  {
+    "name": "@aikdna/kdna-read",
+    "version": "0.3.0-rc.component-semantics.2",
+    "tar": "vendor/aikdna-kdna-read-0.3.0-rc.component-semantics.2.tgz",
+    "bytes": 100934,
+    "sha256": "43d0f12a1a63a88d26570bfff821919a5cd478fdbd0568bd9c819bc56078b0f0",
+    "sha512": "sha512-gz6JSH8i0fve0+nt7RdAeby2UDNtkWgEAUpb+Fi1kvCEv0O7Aw4eMiRAbR5EHLyj+7Mjn9mLjthpugqTbTRbLQ==",
+    "provenance": "exact current public development artifact; no registry publication claim"
+  },
+  {
+    "name": "@aikdna/kdna-web-server",
+    "version": "0.5.0-rc.component-semantics.1",
+    "tar": "vendor/aikdna-kdna-web-server-0.5.0-rc.component-semantics.1.tgz",
+    "bytes": 27782,
+    "sha256": "4057a84b76d173470c59f95dc0e73af81aa21d36876f6daf4226c1ceaefc7551",
+    "sha512": "sha512-ZuHV5v3ESGfuy6ENLC/1WK0R/Z9muZNUSTzGUAKuaORxM8jvTkka+PSpNU7K3IL/v6RXKDf4j3skC5ZgkjiJPg==",
+    "provenance": "exact current public development artifact; no registry publication claim"
+  },
+  {
+    "name": "@aikdna/kdna-remote-server",
+    "version": "0.6.0-rc.component-semantics.1",
+    "tar": "vendor/aikdna-kdna-remote-server-0.6.0-rc.component-semantics.1.tgz",
+    "bytes": 14192,
+    "sha256": "f50a2e48db7016c9059c6b2e472903f77d2fc51b67d0f354a609f72037b5c413",
+    "sha512": "sha512-0STWMvLaE5UYPJUE89KXyOkzCENaII7MAxkHTa4UOBqzgV3M9vamkloDaAmIajs2ndzsI+1l0Ci/AliZi+7MeQ==",
+    "provenance": "exact paired current Remote development artifact, not a registry publication claim"
+  }
+]
