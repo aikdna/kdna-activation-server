@@ -55,6 +55,12 @@
     "require-from-string": "file:vendor/require-from-string-2.0.2.tgz",
     "@aikdna/kdna-remote-server": "file:vendor/aikdna-kdna-remote-server-0.6.0-rc.component-semantics.1.tgz"
   },
+  "overrides": {
+    "@aikdna/kdna-core": "$@aikdna/kdna-core",
+    "@aikdna/kdna-read": "$@aikdna/kdna-read",
+    "@aikdna/kdna-remote-server": "$@aikdna/kdna-remote-server",
+    "@aikdna/kdna-web-server": "$@aikdna/kdna-web-server"
+  },
   "scripts": {
     "test": "node scripts/run-current-tests.cjs",
     "lint": "node --check src/observer.js && node --check src/store.js && node --check tests/current-observer.test.mjs",
