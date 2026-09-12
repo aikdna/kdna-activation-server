@@ -1,4 +1,9 @@
 node_modules/
+*.tgz
+# The vendored offline dependency graph must travel with the repository so a
+# clean clone installs these exact pinned KDNA/Read bytes; every other *.tgz
+# stays ignored.
+!vendor/*.tgz
 *.log
 .DS_Store
 .env
