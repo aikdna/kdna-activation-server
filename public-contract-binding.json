@@ -42,7 +42,7 @@
   "integration_remote_artifact": {
     "version": "0.6.0-rc.component-semantics.1",
     "filename": "aikdna-kdna-remote-server-0.6.0-rc.component-semantics.1.tgz",
-    "bytes": 14192,
-    "sha256": "f50a2e48db7016c9059c6b2e472903f77d2fc51b67d0f354a609f72037b5c413"
+    "bytes": 14246,
+    "sha256": "2ee124fc6d5d5ff0747a45a52d883d8edc176385fe52bb581bbace9543e9129c"
   }
 }
