@@ -45,7 +45,7 @@ Host rechecks policy through its existing preparation and delivery lifecycle. If
 The repository preserves the old source/tests and changelog as history. Current commands explicitly select current tests; old CLI execution refuses, and the old server/signing modules are not public exports or tar members. `vendor/provenance.json` records exact development tar hashes and repack provenance; local repacks are not asserted to be original registry tarballs.
 
 ```
-npm ci --offline --ignore-scripts --omit=optional --no-audit --no-fund
+npm ci --ignore-scripts --omit=optional --no-audit --no-fund
 npm test
 npm run lint
 npm run check:public-surface
