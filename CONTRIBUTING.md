@@ -3,7 +3,7 @@
 ## Issues
 
 Open an issue at the repository. Include:
-- `kdna version` output
+- Node.js version and the exact package/dependency coordinates
 - OS and shell
 - Minimal reproduction steps
 - Expected vs actual behavior
@@ -19,9 +19,9 @@ If proposing a feature, tag with `[RFC]` and describe the problem before the sol
 5. Verify before opening:
    - `npm test` passes
    - `npm run lint` passes (if available)
-   - `kdna validate` works against a test .kdna file
-   - For CLI changes: verify `kdna --help` output is correct
-   - For asset changes: include SHA256 and validation output
+   - `npm run check:public-surface` passes
+   - For asset or binding changes: include SHA256 and the exact current
+     Core/Read observation, with synthetic data and explicit scope
 
 PRs that fail any verification command will be reviewed with requested changes.
 
@@ -37,17 +37,14 @@ This repository is the activation server component. KDNA CLI commands live in
 the separate `kdna-cli` repository; do not add CLI shims or command
 implementations here.
 
-Notes on the current CLI surface (the `kdna-cli` source is authoritative):
+The current CLI source supports explicit-file `inspect`, `validate` and `read`.
+Its separate README and exact dependency binding are authoritative; do not
+restore installation, registry or legacy loading commands in this observer.
+Published CLI releases retain their own versioned command contracts.
 
-- `install`, `registry`, `setup`, `validate`, and `version` are live commands.
-- Registry resolution requires an explicit `KDNA_REGISTRY_URL`; there is no
-  default public registry.
-- There is no `kdna create` command. Do not reference one in docs, examples,
-  or PR text.
-
-The whole KDNA ecosystem is pre-release. No component — including this server,
-currently 0.3.0-rc.current-observer.2 — is Beta, stable, or GA. Do not describe any version line as
-"the public stable line" in code, docs, or PR text.
+The whole KDNA ecosystem is pre-release. This observer's exact current package
+coordinate is in `package.json` and `public-contract-binding.json`; source
+availability does not establish a registry release, Beta, stable or GA status.
 
 ## Current observer validation
 
