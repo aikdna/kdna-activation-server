@@ -4,11 +4,11 @@ Copyright 2026 KDNA Authors
 This product includes software developed at
 https://github.com/aikdna/kdna-activation-server
 
-This server is a license-management reference implementation. It
-implements specs/kdna-entitlement-api.md and the self-hosting
-invariant from docs/REMOTE_MODE.md. The server has no KDNA Inc.
-URL hardcoded; license records and the signing keypair are
-deployer-controlled.
+This package provides a co-located current entitlement-store observer
+for the public KDNA reference Host. The deployment owns the store,
+identity binding and policy. The observer supplies process-local context
+and policy observations; it has no standalone server, CLI or issuer
+signing service.
 
 See LICENSE for the full Apache 2.0 license text. See README.md
-for the self-hosting guide and the API contract.
+for the observer embedding guide and the API contract.
