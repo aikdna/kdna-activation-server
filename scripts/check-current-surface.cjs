@@ -3,6 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const { spawnSync } = require('node:child_process');
 const pkg = require('../package.json');
+require('./check-vendor-provenance.cjs').verifyVendorProvenance();
 const expected = ['src/index.js', 'src/index.d.ts', 'src/observer.js', 'src/store.js', 'src/contract.js', 'README.md', 'CHANGELOG.md', 'LICENSE', 'NOTICE', 'public-contract-binding.json'];
 assert.deepEqual(pkg.files, expected);
 assert.deepEqual(Object.keys(pkg.exports), ['.']);

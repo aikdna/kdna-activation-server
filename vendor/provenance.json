@@ -172,82 +172,6 @@
   },
   {
     "name": "@aikdna/kdna-core",
-    "version": "0.23.0",
-    "tar": "vendor/aikdna-kdna-core-0.23.0.tgz",
-    "sha256": "b2cecb761e599d8711114d7288d6caf627b1aa01620699ecb1fca49ac3bb6ba0",
-    "sha512": "sha512-7C07+UNeph94DxeXVdZbOf7ss1a4kUqpBO6Jvws9D7QOrnKbhb5W6+UNEk+s4NRN2+Px5P3UsObGd0enC5k/UA==",
-    "bytes": 137792,
-    "provenance": "exact retained local reference candidate artifact; not claimed registry tar",
-    "source_package": {
-      "name": "@aikdna/kdna-core",
-      "version": "0.23.0"
-    },
-    "source_inventory": {
-      "algorithm": "SHA-256",
-      "sha256": "e9ad5f163d5afd1b069864f9f2c3df16c4a19a9da42b0c249ff0c00912d062e7",
-      "file_count": 35,
-      "encoding": "UTF-8 compact JSON array sorted by package-relative path, records ordered keys path,bytes,sha256; no external paths"
-    }
-  },
-  {
-    "name": "@aikdna/kdna-read",
-    "version": "0.2.0",
-    "tar": "vendor/aikdna-kdna-read-0.2.0.tgz",
-    "sha256": "1595075677dc1359c2df751ec54a706b55ffff6bfc77d117e16464fb16a5c96e",
-    "sha512": "sha512-9rPzATd7JCV+yTQl1Zg5dx60nTwmc1mE6UsSYLVCeIayt21he/Wcm1WxOVGyq9wWB39okgeFLA2qrrA/NHLOoQ==",
-    "bytes": 92522,
-    "provenance": "exact retained local reference candidate artifact; not claimed registry tar",
-    "source_package": {
-      "name": "@aikdna/kdna-read",
-      "version": "0.2.0"
-    },
-    "source_inventory": {
-      "algorithm": "SHA-256",
-      "sha256": "c60ee2a0c6257601fea03f95061358bbfdc433d91df60b1cec84e822780c4106",
-      "file_count": 36,
-      "encoding": "UTF-8 compact JSON array sorted by package-relative path, records ordered keys path,bytes,sha256; no external paths"
-    }
-  },
-  {
-    "name": "@aikdna/kdna-remote-server",
-    "version": "0.5.0-rc.public-read.2",
-    "tar": "vendor/aikdna-kdna-remote-server-0.5.0-rc.public-read.2.tgz",
-    "sha256": "4470189a407fdde8716d9c15bfdc839091b49d39047879d78ab4ce872dff293d",
-    "sha512": "sha512-PzQSlR141FlLuZoUwHEnO8/+oAfg+ZVZI149JUzd6KdzMTBTG+cB3/7zVTCUxBR4dT2Af0I1pqbP6XrjGMNv7w==",
-    "bytes": 13568,
-    "provenance": "exact retained local reference candidate artifact; not claimed registry tar",
-    "source_package": {
-      "name": "@aikdna/kdna-remote-server",
-      "version": "0.5.0-rc.public-read.2"
-    },
-    "source_inventory": {
-      "algorithm": "SHA-256",
-      "sha256": "ba4a092e7c32e95bc6fee8d2171f47f96b58ecda8c63d886c64c531e82cc5e41",
-      "file_count": 7,
-      "encoding": "UTF-8 compact JSON array sorted by package-relative path, records ordered keys path,bytes,sha256; no external paths"
-    }
-  },
-  {
-    "name": "@aikdna/kdna-web-server",
-    "version": "0.4.0-rc.host-session.2",
-    "tar": "vendor/aikdna-kdna-web-server-0.4.0-rc.host-session.2.tgz",
-    "sha256": "9264bb152ed79326d33cdc554c30bc167d2fc45c462bffea56651d9f45ed198b",
-    "sha512": "sha512-bGWlF6FaCL7Vel/oVVBTXFFjalLWOQ8ZHaOg8PFwHZVf9b9iYNZaWsKz0UJ7EkB3lAmxvTdLGz1ZjDsgi5z/xw==",
-    "bytes": 24165,
-    "provenance": "exact retained local reference candidate artifact; not claimed registry tar",
-    "source_package": {
-      "name": "@aikdna/kdna-web-server",
-      "version": "0.4.0-rc.host-session.2"
-    },
-    "source_inventory": {
-      "algorithm": "SHA-256",
-      "sha256": "d54ba5ff7578dae5f4d3e3ab21aeecec7615dec85c1e50be4c03716dae36750d",
-      "file_count": 15,
-      "encoding": "UTF-8 compact JSON array sorted by package-relative path, records ordered keys path,bytes,sha256; no external paths"
-    }
-  },
-  {
-    "name": "@aikdna/kdna-core",
     "version": "0.24.0-rc.component-semantics.2",
     "tar": "vendor/aikdna-kdna-core-0.24.0-rc.component-semantics.2.tgz",
     "bytes": 235986,
@@ -277,9 +201,9 @@
     "name": "@aikdna/kdna-remote-server",
     "version": "0.6.0-rc.component-semantics.1",
     "tar": "vendor/aikdna-kdna-remote-server-0.6.0-rc.component-semantics.1.tgz",
-    "bytes": 14192,
-    "sha256": "f50a2e48db7016c9059c6b2e472903f77d2fc51b67d0f354a609f72037b5c413",
-    "sha512": "sha512-0STWMvLaE5UYPJUE89KXyOkzCENaII7MAxkHTa4UOBqzgV3M9vamkloDaAmIajs2ndzsI+1l0Ci/AliZi+7MeQ==",
+    "bytes": 14246,
+    "sha256": "2ee124fc6d5d5ff0747a45a52d883d8edc176385fe52bb581bbace9543e9129c",
+    "sha512": "sha512-Qi5iZ2Q3vA95v6RMgnJKyAXE8aGBt0e8ReP0kAwro3c6hHhGH4Dh+WZhtmmR5p5NTysVHsxYeT7c0Q0m53ISZQ==",
     "provenance": "exact paired current Remote development artifact, not a registry publication claim"
   }
 ]

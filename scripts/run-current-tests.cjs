@@ -10,7 +10,7 @@ try {
   const check = spawnSync(process.execPath, ['scripts/check-current-surface.cjs'], { stdio: 'inherit' });
   if (check.status !== 0) process.exitCode = check.status ?? 1;
   else {
-    const result = spawnSync(process.execPath, ['--unhandled-rejections=strict', '--test', '--test-timeout=30000', 'tests/current-observer.test.mjs'],
+    const result = spawnSync(process.execPath, ['--unhandled-rejections=strict', '--test', '--test-timeout=30000', 'tests/current-observer.test.mjs', 'tests/vendor-provenance.test.cjs'],
       { stdio: 'inherit', env: { ...process.env, KDNA_TEST_DIR: root } });
     process.exitCode = result.status ?? 1;
     if (process.exitCode === 0) {
